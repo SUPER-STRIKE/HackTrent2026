@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
-import { listPolicies } from "@/lib/policy";
+import { listAgents, listPolicies } from "@/lib/policy";
 import { NotApprover, PageHead } from "@/components/ui";
 import { createPolicyAction, deletePolicyAction, togglePolicyAction } from "./actions";
 
@@ -11,6 +11,7 @@ export const instant = false;
 const NOTICES: Record<string, { text: string; tone: "ok" | "warn" }> = {
   created: { text: "Policy created. It applies to the next action an agent reports.", tone: "ok" },
   deleted: { text: "Policy deleted.", tone: "ok" },
+  "unknown-agent": { text: "No agent with that id has reported an action yet. Pick one from the list, or leave the agent field empty to apply the rule to every agent.", tone: "warn" },
   invalid: { text: "Check the form: name, effect and match are required.", tone: "warn" },
   "bad-pattern": { text: "Pattern problem: it must be a valid, simple regular expression (no repeated groups that contain repeats, no backreferences). Allow rules can only match the action type or target.", tone: "warn" },
   "mfa-needed": { text: "MFA verified. Submit the change again to apply it.", tone: "warn" },
@@ -45,7 +46,7 @@ async function Rules({ searchParams }: { searchParams: PageProps<"/policies">["s
   const params = await searchParams;
   const n = Array.isArray(params.notice) ? params.notice[0] : params.notice;
   const notice = n ? NOTICES[n] : undefined;
-  const rules = await listPolicies();
+  const [rules, agents] = await Promise.all([listPolicies(), listAgents()]);
 
   return (
     <div className="stack">
@@ -71,8 +72,13 @@ async function Rules({ searchParams }: { searchParams: PageProps<"/policies">["s
               <option value="allow">{EFFECT_TEXT.allow} (needs MFA, matches the whole action type or target)</option>
             </select>
           </label>
-          <label>Only for agent (optional)<input name="agent_id" maxLength={128} placeholder="leave empty for every agent" /></label>
-          <label>Reason shown to the operator (optional)<input name="reason" maxLength={300} /></label>
+          <label>Reason shown to the operator (optional)<input name="reason" maxLength={300} placeholder="Outbound network calls are off limits" /></label>
+          <label>Only for one agent (optional, usually leave empty)
+            <input name="agent_id" maxLength={128} list="known-agents" placeholder="empty = every agent" />
+            <datalist id="known-agents">
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </datalist>
+          </label>
           <div><button className="btn btn-primary">Create policy</button></div>
         </form>
       </section>

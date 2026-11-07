@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { approverName, isApprover } from "@/lib/approvers";
 import { isUuid } from "@/lib/events";
-import { createPolicy, deletePolicy, getPolicy, setPolicyEnabled } from "@/lib/policy";
+import { agentExists, createPolicy, deletePolicy, getPolicy, setPolicyEnabled } from "@/lib/policy";
 import { spendStepUp, stepUpLoginUrl } from "@/lib/step-up";
 import { validatePolicy, type PolicyEffect, type PolicyMatchOn } from "@/lib/scoring-core";
 
@@ -30,13 +30,17 @@ export async function createPolicyAction(formData: FormData) {
   if (!EFFECTS.includes(effect) || !MATCHES.includes(match_on) || !name) redirect("/policies?notice=invalid");
   if (validatePolicy(effect, match_on, pattern)) redirect("/policies?notice=bad-pattern");
 
+  // A scope that names no known agent would silently never match, so refuse it.
+  const agentId = text(formData, "agent_id", 128);
+  if (agentId && !(await agentExists(agentId))) redirect("/policies?notice=unknown-agent");
+
   if (effect === "allow" && !(await spendStepUp(session))) redirect(stepUpLoginUrl("/policies?notice=mfa-needed"));
 
   await createPolicy({
     name,
     pattern,
     match_on,
-    agent_id: text(formData, "agent_id", 128) || null,
+    agent_id: agentId || null,
     effect,
     reason: text(formData, "reason", 300) || null,
     created_by: approverName(session.user),

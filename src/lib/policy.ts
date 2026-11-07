@@ -25,6 +25,19 @@ export async function getPolicy(id: string): Promise<PolicyRow | null> {
   return rows[0] ?? null;
 }
 
+export type KnownAgent = { id: string; name: string };
+
+/** Agents that have reported at least one action, so a policy can be scoped to one by picking it from a list. */
+export async function listAgents(): Promise<KnownAgent[]> {
+  const { rows } = await db.query<KnownAgent>(`SELECT id, name FROM agents ORDER BY name LIMIT 200`);
+  return rows;
+}
+
+export async function agentExists(id: string): Promise<boolean> {
+  const { rowCount } = await db.query(`SELECT 1 FROM agents WHERE id = $1`, [id]);
+  return rowCount === 1;
+}
+
 export async function createPolicy(p: {
   name: string;
   pattern: string;
