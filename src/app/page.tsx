@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth0 } from "@/lib/auth0";
 
 export const instant = false;
@@ -15,6 +16,12 @@ export default async function Home() {
           <a className="underline" href="/dashboard">
             Live dashboard
           </a>
+          <a className="underline" href="/investigator">
+            Investigator
+          </a>
+          <Link className="underline" href="/incidents">
+            Incidents
+          </Link>
           <a className="underline" href="/approvals">
             Approvals queue
           </a>

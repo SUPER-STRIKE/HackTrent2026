@@ -16,6 +16,8 @@ export default function DashboardPage() {
           <p className="text-sm text-gray-500">Everything your agents are doing, live.</p>
         </div>
         <nav className="flex gap-4 text-sm text-gray-500 underline">
+          <Link href="/incidents">Incidents</Link>
+          <Link href="/investigator">Investigator</Link>
           <Link href="/approvals">Approvals</Link>
           <Link href="/">Home</Link>
         </nav>
