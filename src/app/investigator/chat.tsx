@@ -41,45 +41,39 @@ export function Chat() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex min-h-64 flex-col gap-3 rounded border p-4" aria-live="polite">
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Audit log assistant</h2>
+        <span className="meta">last 7 days, latest 120 events</span>
+      </div>
+      <div className="chat-log" aria-live="polite">
         {messages.length === 0 && (
-          <div className="flex flex-col items-start gap-2 text-sm text-gray-500">
-            <p>Ask about what your agents did. Try:</p>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+            <p className="mono-dim" style={{ margin: 0 }}>Ask a question, or start with one of these.</p>
             {SUGGESTIONS.map((s) => (
-              <button key={s} onClick={() => void send(s)} className="rounded border px-3 py-1 text-left text-gray-700 hover:bg-gray-50">
-                {s}
-              </button>
+              <button key={s} onClick={() => void send(s)} className="chip">{s}</button>
             ))}
           </div>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "self-end rounded bg-black px-3 py-2 text-sm text-white" : "self-start whitespace-pre-wrap rounded bg-gray-100 px-3 py-2 text-sm"}>
+          <div key={i} className={`msg ${m.role}`}>
+            <span className="who">{m.role === "user" ? "You" : "Investigator"}</span>
             {m.text}
           </div>
         ))}
-        {busy && <p className="text-sm text-gray-400">Investigating…</p>}
+        {busy && <p className="mono-dim" style={{ margin: 0 }}>Investigating…</p>}
         <div ref={endRef} />
       </div>
       <form
-        className="flex gap-2"
+        className="chat-form"
         onSubmit={(e) => {
           e.preventDefault();
           void send(input);
         }}
       >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          maxLength={2000}
-          placeholder="Ask the Investigator…"
-          aria-label="Question"
-          className="flex-1 rounded border px-3 py-2 text-sm"
-        />
-        <button disabled={busy || !input.trim()} className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-40">
-          Ask
-        </button>
+        <input className="input" value={input} onChange={(e) => setInput(e.target.value)} maxLength={2000} placeholder="Ask about agent activity" aria-label="Question" />
+        <button className="btn btn-primary" disabled={busy || !input.trim()}>Ask</button>
       </form>
-    </div>
+    </section>
   );
 }

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { AgentEvent } from "@/lib/events";
+import { riskThreshold } from "@/lib/risk";
 
 export type MinuteBucket = { bucket: string; events: number; risky: number; denied: number; pending: number; max_risk: number | null };
 export type AgentTotal = { agent_id: string; agent_name: string | null; events: number; risky: number; avg_risk: number | null };
@@ -7,6 +8,7 @@ export type ActionTotal = { action_type: string; events: number; avg_risk: numbe
 
 export type DashboardData = {
   generated_at: string;
+  threshold: number;
   totals: { events_1h: number; risky_1h: number; denied_1h: number; pending_now: number; avg_risk_1h: number | null };
   per_minute: MinuteBucket[];
   by_agent: AgentTotal[];
@@ -60,6 +62,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   return {
     generated_at: new Date().toISOString(),
+    threshold: riskThreshold(),
     totals: {
       events_1h,
       risky_1h: per_minute.reduce((s, b) => s + b.risky, 0),

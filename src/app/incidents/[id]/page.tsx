@@ -5,23 +5,20 @@ import { auth0 } from "@/lib/auth0";
 import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
 import { geminiConfigured } from "@/lib/gemini";
 import { findSimilar, getEvent, getSessionContext, summarizeIncident } from "@/lib/incidents";
+import { NotApprover, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
 
 export const instant = false;
 
 export default function IncidentPage({ params }: PageProps<"/incidents/[id]">) {
   return (
-    <main className="mx-auto w-full max-w-4xl p-6 sm:p-8">
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Incident</h1>
-        <nav className="flex gap-4 text-sm text-gray-500 underline">
-          <Link href="/incidents">All incidents</Link>
-          <Link href="/investigator">Investigator</Link>
-        </nav>
-      </header>
-      <Suspense fallback={<p className="text-gray-500">Loading…</p>}>
+    <>
+      <PageHead title="Incident">
+        <Link className="btn" href="/incidents">All incidents</Link>
+      </PageHead>
+      <Suspense fallback={<p className="mono-dim">Loading…</p>}>
         <Detail params={params} />
       </Suspense>
-    </main>
+    </>
   );
 }
 
@@ -29,40 +26,49 @@ async function Detail({ params }: { params: PageProps<"/incidents/[id]">["params
   const { id } = await params;
   const session = await auth0.getSession();
   if (!session) redirect(`/auth/login?returnTo=/incidents/${encodeURIComponent(id)}`);
-  if (!isApprover(session.user)) return <p className="rounded bg-amber-50 px-4 py-3 text-sm text-amber-900">{NOT_APPROVER_TEXT}</p>;
+  if (!isApprover(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
 
   const event = await getEvent(id);
   if (!event) notFound();
 
   const payload = JSON.stringify(event.payload, null, 2);
   return (
-    <div className="flex flex-col gap-8">
-      <section className="rounded border p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <code className="font-semibold break-all">{event.action_type}</code>
-          {event.target && <code className="break-all text-gray-600">→ {event.target}</code>}
+    <div className="stack">
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Action</h2>
+          <StatusTag status={event.status} />
         </div>
-        <p className="mt-2 text-sm">
-          Risk {event.risk_score?.toFixed(2) ?? "n/a"} ({event.risk_level ?? "unscored"}) · {event.status}
-          {event.decided_by ? ` by ${event.decided_by}` : ""}
-        </p>
-        {event.risk_reason && <p className="mt-1 text-sm text-gray-600">{event.risk_reason}</p>}
-        <p className="mt-1 text-xs text-gray-500">
-          {event.agent_name ?? event.agent_id} · session {event.session_id} · {new Date(event.time).toLocaleString()}
-        </p>
-        {payload !== "{}" && <pre className="mt-2 max-h-48 overflow-auto rounded bg-gray-50 p-2 text-xs">{payload.slice(0, 4000)}</pre>}
+        <div className="panel-body" style={{ borderLeft: `3px solid var(--sig-${event.risk_level === "critical" ? "crit" : event.risk_level === "high" ? "high" : event.risk_level === "medium" ? "med" : "low"})` }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+            <RiskBadge level={event.risk_level} score={event.risk_score} />
+            <span className="data" style={{ fontWeight: 500 }}>{event.action_type}</span>
+            {event.target && <span className="data" style={{ color: "var(--dim)" }}>{event.target}</span>}
+          </div>
+          {event.risk_reason && <p style={{ margin: "8px 0 0" }}>{event.risk_reason}</p>}
+          <dl className="kv">
+            <dt>Agent</dt><dd>{event.agent_name ?? event.agent_id}</dd>
+            <dt>Session</dt><dd>{event.session_id}</dd>
+            <dt>Reported</dt><dd>{new Date(event.time).toLocaleString()}</dd>
+            {event.decided_by && (<><dt>Decided by</dt><dd>{event.decided_by}</dd></>)}
+            <dt>Event id</dt><dd>{event.id}</dd>
+          </dl>
+          {payload !== "{}" && <pre className="payload">{payload.slice(0, 4000)}</pre>}
+        </div>
       </section>
 
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Summary</h2>
-        <Suspense fallback={<p className="text-sm text-gray-400">Gemini is writing the summary…</p>}>
-          <Summary id={id} />
-        </Suspense>
+      <section className="panel">
+        <div className="panel-head"><h2>Summary</h2><span className="meta">written by Gemini</span></div>
+        <div className="panel-body">
+          <Suspense fallback={<p className="mono-dim">Writing the summary…</p>}>
+            <Summary id={id} />
+          </Suspense>
+        </div>
       </section>
 
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Similar past incidents</h2>
-        <Suspense fallback={<p className="text-sm text-gray-400">Searching…</p>}>
+      <section className="panel">
+        <div className="panel-head"><h2>Similar past incidents</h2><span className="meta">matched on action, target and payload</span></div>
+        <Suspense fallback={<p className="empty">Searching…</p>}>
           <Similar id={id} />
         </Suspense>
       </section>
@@ -73,29 +79,29 @@ async function Detail({ params }: { params: PageProps<"/incidents/[id]">["params
 async function Summary({ id }: { id: string }) {
   const event = await getEvent(id);
   if (!event) return null;
-  if (!geminiConfigured()) return <p className="text-sm text-gray-500">Set GEMINI_API_KEY to get AI summaries.</p>;
+  if (!geminiConfigured()) return <p className="mono-dim">Set GEMINI_API_KEY to get AI summaries.</p>;
   const text = await summarizeIncident(event, await getSessionContext(event)).catch((err) => {
     console.error("incident summary failed", err instanceof Error ? err.message : err);
     return null;
   });
-  if (text === null) return <p className="text-sm text-amber-800">The summary is unavailable right now. Reload to retry.</p>;
-  return <p className="whitespace-pre-wrap rounded bg-gray-50 p-4 text-sm">{text}</p>;
+  if (text === null) return <p className="notice warn">The summary is unavailable right now. Reload to retry.</p>;
+  return <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{text}</p>;
 }
 
 async function Similar({ id }: { id: string }) {
   const event = await getEvent(id);
   if (!event) return null;
   const similar = await findSimilar(event);
-  if (similar.length === 0) return <p className="text-sm text-gray-500">No similar incidents found.</p>;
+  if (similar.length === 0) return <p className="empty">No similar incidents found.</p>;
   return (
-    <ul className="divide-y rounded border text-sm">
+    <ul className="log">
       {similar.map(({ event: e, similarity }) => (
         <li key={e.id}>
-          <Link href={`/incidents/${e.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 hover:bg-gray-50">
-            <span className="w-12 shrink-0 font-semibold">{Math.round(similarity * 100)}%</span>
-            <code className="break-all">{e.action_type}</code>
-            {e.target && <code className="break-all text-gray-500">→ {e.target}</code>}
-            <span className="ml-auto text-xs text-gray-400">{e.status} · {new Date(e.time).toLocaleString()}</span>
+          <Link href={`/incidents/${e.id}`} className={`row ${railClass(e.risk_level)}`}>
+            <span className="time">{Math.round(similarity * 100)}%</span>
+            <span className="act">{e.action_type}</span>
+            {e.target && <span className="tgt">{e.target}</span>}
+            <span className="end"><StatusTag status={e.status} /></span>
           </Link>
         </li>
       ))}
