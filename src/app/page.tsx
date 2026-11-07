@@ -12,6 +12,9 @@ export default async function Home() {
       {session ? (
         <>
           <p>Logged in as {session.user.email}</p>
+          <a className="underline" href="/approvals">
+            Approvals queue
+          </a>
           <a className="rounded bg-black px-4 py-2 text-white" href="/auth/logout">
             Log out
           </a>
