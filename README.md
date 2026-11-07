@@ -11,7 +11,7 @@ Agents send every action they take to Tripwire. Gemini scores each action's risk
 | Login, agent tokens, step-up MFA | Auth0 | Humans sign in; agents get M2M tokens; approvals require MFA |
 | Event storage and live charts | Tiger Data (Timescale) | Hypertable of agent events, continuous aggregates for the dashboard |
 | Risk scoring and analysis | Gemini | Scores each action, powers the Investigator chat, incident summaries and similar-incident search |
-| Hosting | Vercel + GoDaddy DNS | Deployed on Vercel at a custom domain |
+| Hosting | Vercel | Deployed on Vercel |
 
 Pages:
 
@@ -19,6 +19,16 @@ Pages:
 - `/approvals`: queue of held actions; approve with MFA or deny
 - `/incidents`: Gemini summaries and similar incidents
 - `/investigator`: ask questions about what agents did
+- `/policies`: rules the team writes itself (block, always ask a human, or allow)
+
+## What is new
+
+- **Plugs into real agents:** JavaScript and Python SDKs, an MCP proxy and a Claude Code hook (see [Agent SDK](#agent-sdk)).
+- **Safe when things fail:** if Tripwire is unreachable the agent is blocked by default, and a timed-out request never lets an action run.
+- **Explainable scores:** every action shows "Why this score": built-in rule, Gemini, unusual behavior for that agent, past human decisions, or a policy.
+- **Your own rules:** policies run before the model. Loosening a rule needs a fresh MFA check.
+- **Read-only viewer mode:** with `VIEWER_MODE=1`, any signed-in user can look around and ask the Investigator, while approving, denying and editing policies stay limited to approvers.
+- **Repeatable demo:** `RISK_MODEL=off` scores with built-in rules and policies only, so the demo does not depend on Gemini quota.
 
 ## Getting started
 
@@ -57,6 +67,8 @@ See [`.env.example`](.env.example) for the full list. The main groups are:
 | `npm test` | Unit tests for scoring and the SDK |
 
 ## Agent SDK
+
+Tripwire can only guard what it is told about. The SDK is a small piece of code inside the agent that asks Tripwire "may I run this?" before each action and waits for the answer. Adapters attach the SDK to tools people already use, so no agent code has to change.
 
 Agents report every action to Tripwire before running it. Low-risk actions run at once, risky ones wait for a human with MFA, denied ones never run.
 
@@ -105,6 +117,13 @@ The command-line adapters read `TRIPWIRE_URL`, `TRIPWIRE_AUTH0_DOMAIN`, `TRIPWIR
 Every action stores the factors behind its score, shown as "Why this score" on Approvals and on each incident. Policies that loosen protection (`allow`, or turning off/deleting `deny` and `require_approval`) need a fresh MFA check.
 
 Apply the schema change with `npm run db:migrate` (adds `policy_rules` and `agent_events.risk_factors`). `npm test` runs the unit tests.
+
+## Where the data comes from
+
+- **Seeded demo cases** (`db/demo-data.mjs`): 10 fixed, hand-written cases plus generated background traffic, so the demo plays the same way every time. Their session ids start with `seed-`.
+- **`npm run simulate`**: a scripted agent. The actions are staged, but they go through the real API with real Auth0 tokens, so scoring, holding, MFA approval and logging are real.
+- **Intro page replays** (`src/data/tech-disasters.json`): real public postmortems (Knight Capital, GitLab, Hawaii alert), each with a source link.
+- **In real use**: events come from your own agents through the SDK, the MCP proxy or the Claude Code hook.
 
 ## Demo
 
