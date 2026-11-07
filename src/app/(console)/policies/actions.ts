@@ -4,9 +4,9 @@ import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { approverName, isApprover } from "@/lib/approvers";
 import { isUuid } from "@/lib/events";
-import { createPolicy, deletePolicy, listPolicies, setPolicyEnabled } from "@/lib/policy";
+import { createPolicy, deletePolicy, getPolicy, setPolicyEnabled } from "@/lib/policy";
 import { spendStepUp, stepUpLoginUrl } from "@/lib/step-up";
-import { validatePattern, type PolicyEffect, type PolicyMatchOn } from "@/lib/scoring-core";
+import { validatePolicy, type PolicyEffect, type PolicyMatchOn } from "@/lib/scoring-core";
 
 const EFFECTS: PolicyEffect[] = ["deny", "require_approval", "allow"];
 const MATCHES: PolicyMatchOn[] = ["any", "action_type", "target", "payload"];
@@ -28,7 +28,7 @@ export async function createPolicyAction(formData: FormData) {
   const name = text(formData, "name", 80);
   const pattern = text(formData, "pattern", 300);
   if (!EFFECTS.includes(effect) || !MATCHES.includes(match_on) || !name) redirect("/policies?notice=invalid");
-  if (validatePattern(pattern)) redirect("/policies?notice=bad-pattern");
+  if (validatePolicy(effect, match_on, pattern)) redirect("/policies?notice=bad-pattern");
 
   if (effect === "allow" && !(await spendStepUp(session))) redirect(stepUpLoginUrl("/policies?notice=mfa-needed"));
 
@@ -49,9 +49,11 @@ export async function togglePolicyAction(formData: FormData) {
   const id = formData.get("id");
   if (!isUuid(id)) redirect("/policies?notice=invalid");
   const enable = formData.get("enable") === "1";
-  const rule = (await listPolicies()).find((p) => p.id === id);
-  // Switching off a deny or require rule loosens protection, so it needs MFA.
-  if (!enable && rule && rule.effect !== "allow" && !(await spendStepUp(session))) redirect(stepUpLoginUrl("/policies?notice=mfa-needed"));
+  const rule = await getPolicy(id);
+  if (!rule) redirect("/policies?notice=invalid");
+  // Switching off a deny or require rule, or switching on an allow rule, loosens protection, so it needs MFA.
+  const loosens = enable === (rule.effect === "allow");
+  if (loosens && !(await spendStepUp(session))) redirect(stepUpLoginUrl("/policies?notice=mfa-needed"));
   await setPolicyEnabled(id, enable);
   redirect("/policies");
 }
@@ -60,8 +62,9 @@ export async function deletePolicyAction(formData: FormData) {
   const session = await requireApprover();
   const id = formData.get("id");
   if (!isUuid(id)) redirect("/policies?notice=invalid");
-  const rule = (await listPolicies()).find((p) => p.id === id);
-  if (rule && rule.effect !== "allow" && !(await spendStepUp(session))) redirect(stepUpLoginUrl("/policies?notice=mfa-needed"));
+  const rule = await getPolicy(id);
+  if (!rule) redirect("/policies?notice=invalid");
+  if (rule.effect !== "allow" && !(await spendStepUp(session))) redirect(stepUpLoginUrl("/policies?notice=mfa-needed"));
   await deletePolicy(id);
   redirect("/policies?notice=deleted");
 }

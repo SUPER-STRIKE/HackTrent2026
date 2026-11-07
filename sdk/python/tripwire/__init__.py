@@ -17,6 +17,7 @@ from __future__ import annotations
 import functools
 import json
 import re
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -35,6 +36,9 @@ class TripwireUnavailable(Exception):
     """Tripwire could not be reached (network error, timeout, 5xx or 429 after retries)."""
 
     retry_after: Optional[float] = None
+    #: True when the request may have reached the server (timeout, reset, 5xx), so the action may already be
+    #: recorded and held. Ambiguous failures never fail open.
+    ambiguous: bool = False
 
 
 class TripwireError(Exception):
@@ -46,6 +50,32 @@ class TripwireError(Exception):
 
 
 _FAIL_MODES = ("closed", "allowlist", "open")
+_MAX_PAYLOAD = 32 * 1024
+_MAX_STRING = 2000
+
+
+def _bound_payload(payload: Any) -> dict:
+    """JSON-safe copy of a payload that fits the server's body limit."""
+
+    def clip(v: Any, seen: set) -> Any:
+        if isinstance(v, str):
+            return v if len(v) <= _MAX_STRING else v[:_MAX_STRING] + f"...[truncated {len(v) - _MAX_STRING} chars]"
+        if isinstance(v, (dict, list, tuple)):
+            if id(v) in seen:
+                return "[circular]"
+            seen = seen | {id(v)}
+            if isinstance(v, dict):
+                return {str(k): clip(x, seen) for k, x in v.items()}
+            return [clip(x, seen) for x in v]
+        if v is None or isinstance(v, (bool, int, float)):
+            return v
+        return clip(repr(v), seen)
+
+    out = clip(payload or {}, set())
+    text = json.dumps(out)
+    if len(text) <= _MAX_PAYLOAD:
+        return out
+    return {"_truncated": True, "preview": text[: _MAX_PAYLOAD // 2]}
 
 
 def _transient(status: int) -> bool:
@@ -83,7 +113,7 @@ class Tripwire:
 
     # ---- transport ----
 
-    def _request(self, url: str, body: Optional[dict], headers: dict, timeout: Optional[float] = None) -> Any:
+    def _request(self, url: str, body: Optional[dict], headers: dict, timeout: Optional[float] = None, records_action: bool = False) -> Any:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data is not None else "GET")
         try:
@@ -97,6 +127,8 @@ class Tripwire:
                 pass
             if _transient(e.code):
                 err = TripwireUnavailable(f"Tripwire: {url} failed ({e.code})")
+                # 429 is refused before anything is recorded; another 5xx may have happened after the insert.
+                err.ambiguous = records_action and e.code != 429
                 try:
                     err.retry_after = min(float(e.headers.get("Retry-After", "")), 30.0)
                 except ValueError:
@@ -106,7 +138,11 @@ class Tripwire:
                 self._token = None
             raise TripwireError(f"Tripwire: {url} failed ({e.code}) {payload.get('error', '')}".strip(), e.code) from None
         except (urllib.error.URLError, TimeoutError, OSError) as e:
-            raise TripwireUnavailable(f"Tripwire: could not reach {url}") from e
+            reason = getattr(e, "reason", e)
+            refused = isinstance(reason, (ConnectionRefusedError, socket.gaierror))
+            err = TripwireUnavailable(f"Tripwire: could not reach {url}")
+            err.ambiguous = records_action and not refused
+            raise err from e
 
     def _retry(self, fn: Callable[[], Any]) -> Any:
         attempt = 0
@@ -136,7 +172,7 @@ class Tripwire:
     def _call(self, path: str, body: Optional[dict] = None, timeout: Optional[float] = None) -> Any:
         def once():
             headers = {"authorization": f"Bearer {self._access_token()}", "content-type": "application/json"}
-            return self._request(self.base_url + path, body, headers, timeout)
+            return self._request(self.base_url + path, body, headers, timeout, records_action=body is not None)
 
         return self._retry(once)
 
@@ -146,7 +182,7 @@ class Tripwire:
         """Returns {"event_id", "status": "allowed" | "pending" | "denied", "risk": {...}}."""
         return self._call(
             "/api/ingest",
-            {"session_id": session_id, "action_type": action_type, "target": target, "payload": payload or {}, "agent_name": self.agent_name},
+            {"session_id": session_id, "action_type": action_type, "target": target, "payload": _bound_payload(payload), "agent_name": self.agent_name},
         )
 
     def wait_for_decision(self, event_id: str, timeout: float = 600.0) -> dict:
@@ -181,7 +217,8 @@ class Tripwire:
             r = self.report(session_id, action_type, target, payload)
         except TripwireUnavailable as e:
             mode = fail_mode or self.fail_mode
-            allowed = self._offline_allowed(action_type, mode)
+            # If the request may have arrived, the action could already be held for a human: never run it.
+            allowed = not e.ambiguous and self._offline_allowed(action_type, mode)
             if self.on_fail_mode:
                 self.on_fail_mode({"action_type": action_type, "mode": mode, "allowed": allowed, "error": e})
             if not allowed:

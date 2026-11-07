@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { baselineFactors, combine, evaluatePolicies, historyFactors, validatePattern, type AgentStats, type PolicyRule } from "../src/lib/scoring-core.ts";
+import { baselineFactors, combine, evaluatePolicies, historyFactors, validatePattern, validatePolicy, type AgentStats, type PolicyRule } from "../src/lib/scoring-core.ts";
 
 const base = (score: number, source: "rules" | "gemini" | "fallback" = "gemini") => ({
   score,
@@ -82,4 +82,37 @@ test("history cannot push below the built-in rule floor", () => {
   const r = run({ base: base(0.8, "rules"), rulesScore: 0.8, stats: stats({ approved: 9 }), policy: {}, threshold: 0.7 });
   assert.equal(r.score, 0.8);
   assert.equal(r.decision, "hold");
+});
+
+test("history discount never relaxes a hold caused by a Gemini outage", () => {
+  const r = combine({ base: base(0.7, "fallback"), rulesScore: 0.05, stats: stats({ approved: 9 }), policy: {}, threshold: 0.7 });
+  assert.equal(r.decision, "hold");
+  assert.equal(r.score, 0.7);
+});
+
+test("allow rules cannot be triggered by free text the agent controls", () => {
+  const allow = rule({ effect: "allow", pattern: "healthcheck", match_on: "any" });
+  assert.equal(evaluatePolicies([allow], { ...act, payload: { note: "healthcheck" } }).allow, undefined);
+  assert.equal(evaluatePolicies([rule({ effect: "allow", pattern: "healthcheck", match_on: "payload" })], { ...act, payload: { note: "healthcheck" } }).allow, undefined);
+  assert.ok(validatePolicy("allow", "any", "healthcheck"));
+  assert.ok(validatePolicy("allow", "payload", "healthcheck"));
+  assert.equal(validatePolicy("allow", "action_type", "fs\\.read"), null);
+  assert.equal(validatePolicy("deny", "any", "drop"), null);
+});
+
+test("allow rules match the whole field, not a substring", () => {
+  const allow = rule({ effect: "allow", pattern: "read", match_on: "action_type" });
+  assert.ok(evaluatePolicies([allow], { ...act, action_type: "read" }).allow);
+  assert.equal(evaluatePolicies([allow], { ...act, action_type: "read; rm -rf /" }).allow, undefined);
+  assert.equal(evaluatePolicies([allow], { ...act, action_type: "thread" }).allow, undefined);
+});
+
+test("catastrophic regex patterns are rejected and never evaluated", () => {
+  for (const bad of ["(a+)+$", "(a|a)*b", "(a*)*", "(.*a){3}x+", "(x+x+)+y", "(a)\\1"]) assert.ok(validatePattern(bad), bad);
+  for (const ok of ["refund|payout", "^rm\\s+-rf", "(prod|production)", "(foo)+", "drop\\s+table"]) assert.equal(validatePattern(ok), null, ok);
+  // a stored unsafe pattern is skipped, so it cannot hang ingest
+  const start = Date.now();
+  const out = evaluatePolicies([rule({ pattern: "(a+)+$", effect: "deny" })], { ...act, action_type: "a".repeat(60) + "b" });
+  assert.equal(out.deny, undefined);
+  assert.ok(Date.now() - start < 200);
 });

@@ -55,7 +55,14 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const MAX_PATTERN_LENGTH = 200;
 
-/** Returns an error message, or null when the pattern is a usable regular expression. */
+/**
+ * A quantifier applied to a group that itself contains a quantifier or alternation, such as (a+)+ or (a|a)*.
+ * These can backtrack exponentially, and policies run on the ingest path against text the agent controls.
+ */
+const NESTED_QUANTIFIER = /\((?:[^()\\]|\\.)*[+*|{](?:[^()\\]|\\.)*\)\s*[+*{]/;
+const BACKREFERENCE = /\\[1-9]/;
+
+/** Returns an error message, or null when the pattern is a usable, safe regular expression. */
 export function validatePattern(pattern: string): string | null {
   if (!pattern.trim()) return "Pattern is required.";
   if (pattern.length > MAX_PATTERN_LENGTH) return `Pattern is longer than ${MAX_PATTERN_LENGTH} characters.`;
@@ -64,6 +71,21 @@ export function validatePattern(pattern: string): string | null {
   } catch {
     return "Pattern is not a valid regular expression.";
   }
+  if (NESTED_QUANTIFIER.test(pattern) || BACKREFERENCE.test(pattern))
+    return "Pattern is too complex: no repeated groups that contain repeats or alternatives, and no backreferences.";
+  return null;
+}
+
+/**
+ * Allow rules lower risk, and the agent chooses its own action_type and target, so they must match the
+ * whole field and cannot look at free text. Anything else is trivially spoofed by the agent writing the
+ * pattern into its payload.
+ */
+export function validatePolicy(effect: PolicyEffect, matchOn: PolicyMatchOn, pattern: string): string | null {
+  const bad = validatePattern(pattern);
+  if (bad) return bad;
+  if (effect === "allow" && matchOn !== "action_type" && matchOn !== "target")
+    return "Allow rules can only match on the action type or the target, never on free text.";
   return null;
 }
 
@@ -80,6 +102,20 @@ function policyText(rule: PolicyRule, a: ActionShape): string {
   }
 }
 
+const compiled = new Map<string, RegExp | null>();
+function compile(rule: PolicyRule): RegExp | null {
+  // Allow rules match the whole field, so "read" cannot be satisfied by "read; rm -rf".
+  const source = rule.effect === "allow" ? `^(?:${rule.pattern})$` : rule.pattern;
+  let re = compiled.get(source);
+  if (re === undefined) {
+    // A stored pattern that is invalid or unsafe is skipped and must never break ingest.
+    re = validatePattern(rule.pattern) === null ? new RegExp(source, "i") : null;
+    if (compiled.size > 500) compiled.clear();
+    compiled.set(source, re);
+  }
+  return re;
+}
+
 export type PolicyOutcome = { deny?: PolicyRule; require?: PolicyRule; allow?: PolicyRule };
 
 /** First matching rule per effect. Rules scoped to another agent are ignored. */
@@ -87,13 +123,9 @@ export function evaluatePolicies(rules: PolicyRule[], action: ActionShape): Poli
   const out: PolicyOutcome = {};
   for (const rule of rules) {
     if (rule.agent_id && rule.agent_id !== action.agent_id) continue;
-    let hit = false;
-    try {
-      hit = new RegExp(rule.pattern, "i").test(policyText(rule, action));
-    } catch {
-      continue; // a bad stored pattern must never break ingest
-    }
-    if (!hit) continue;
+    // Rules that let more through may not read free text (older rows could).
+    if (rule.effect === "allow" && rule.match_on !== "action_type" && rule.match_on !== "target") continue;
+    if (!compile(rule)?.test(policyText(rule, action))) continue;
     if (rule.effect === "deny") out.deny ??= rule;
     else if (rule.effect === "require_approval") out.require ??= rule;
     else out.allow ??= rule;
@@ -112,7 +144,7 @@ export type AgentStats = {
   last_hour: number;
   /** Hours between the agent's first event in the window and now. */
   span_hours: number;
-  /** Human decisions on the same action_type and target. */
+  /** Human decisions on the same action_type, target and payload. */
   approved: number;
   denied: number;
 };
@@ -165,6 +197,19 @@ export type Assessment = {
   policy: PolicyRule | null;
 };
 
+/** The result for an action a deny policy blocks. */
+export function denyAssessment(rule: PolicyRule): Assessment {
+  return {
+    score: 1,
+    level: "critical",
+    reason: rule.reason?.trim() || `Blocked by policy "${rule.name}"`,
+    source: "policy",
+    factors: [{ kind: "policy", label: `Blocked by policy "${rule.name}"`, score: 1 }],
+    decision: "deny",
+    policy: rule,
+  };
+}
+
 /** Built-in rules at or above this are never lowered by history or an allow policy. */
 const PROTECTED_FLOOR = 0.9;
 
@@ -180,24 +225,14 @@ export function combine(input: {
   const factors: RiskFactor[] = [...base.factors];
 
   // A deny policy decides alone; nothing else matters.
-  if (policy.deny) {
-    factors.unshift({ kind: "policy", label: `Blocked by policy "${policy.deny.name}"`, score: 1 });
-    return {
-      score: 1,
-      level: "critical",
-      reason: policy.deny.reason?.trim() || `Blocked by policy "${policy.deny.name}"`,
-      source: "policy",
-      factors,
-      decision: "deny",
-      policy: policy.deny,
-    };
-  }
+  if (policy.deny) return { ...denyAssessment(policy.deny), factors: [...denyAssessment(policy.deny).factors, ...factors] };
 
   let score = base.score;
   const adjustments: RiskFactor[] = [...(stats ? baselineFactors(stats) : []), ...(stats ? historyFactors(stats) : [])];
   for (const f of adjustments) {
     let delta = f.delta ?? 0;
-    if (delta < 0 && (rulesScore >= PROTECTED_FLOOR || policy.require)) delta = 0; // never relax a protected action
+    // Never relax a protected action: a critical built-in rule, a require policy, or a model outage (fail closed).
+    if (delta < 0 && (rulesScore >= PROTECTED_FLOOR || policy.require || base.source === "fallback")) delta = 0;
     if (delta === 0 && (f.delta ?? 0) < 0) continue;
     const next = clamp01(score + delta);
     // Downward moves cannot go under the built-in rule floor.

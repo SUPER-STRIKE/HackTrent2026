@@ -2,7 +2,7 @@ import { authenticateAgent } from "@/lib/agent-auth";
 import { db } from "@/lib/db";
 import { loadPolicies, loadStats } from "@/lib/policy";
 import { riskThreshold, scoreAction } from "@/lib/risk";
-import { combine, evaluatePolicies, type BaseScore } from "@/lib/scoring-core";
+import { combine, denyAssessment, evaluatePolicies } from "@/lib/scoring-core";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_PENDING_PER_AGENT = 50;
@@ -93,20 +93,14 @@ export async function POST(request: Request) {
     const action = { ...body, agent_id: agent.agentId };
     const [policies, stats] = await Promise.all([
       loadPolicies(agent.agentId),
-      loadStats(agent.agentId, body.action_type, body.target ?? null),
+      loadStats(agent.agentId, body.action_type, body.target ?? null, body.payload ?? {}),
     ]);
     const policy = evaluatePolicies(policies, action);
 
     // A deny policy needs no model call, which also saves Gemini quota.
-    const denied: BaseScore & { rulesScore: number } = {
-      score: 1,
-      reason: "Blocked by policy",
-      source: "rules",
-      factors: [],
-      rulesScore: 1,
-    };
-    const base = policy.deny ? denied : await scoreAction(action);
-    const risk = combine({ base, rulesScore: base.rulesScore, stats, policy, threshold: riskThreshold() });
+    const risk = policy.deny
+      ? denyAssessment(policy.deny)
+      : await scoreAction(action).then((base) => combine({ base, rulesScore: base.rulesScore, stats, policy, threshold: riskThreshold() }));
     const status = risk.decision === "deny" ? "denied" : risk.decision === "hold" ? "pending" : "allowed";
     const decidedBy = risk.decision === "deny" ? `policy:${risk.policy?.name ?? "deny"}` : null;
 

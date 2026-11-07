@@ -20,6 +20,11 @@ export async function listPolicies(): Promise<PolicyRow[]> {
   return rows;
 }
 
+export async function getPolicy(id: string): Promise<PolicyRow | null> {
+  const { rows } = await db.query<PolicyRow>(`SELECT ${COLS} FROM policy_rules WHERE id = $1`, [id]);
+  return rows[0] ?? null;
+}
+
 export async function createPolicy(p: {
   name: string;
   pattern: string;
@@ -45,8 +50,8 @@ export async function deletePolicy(id: string) {
 
 const LOOKBACK = "30 days";
 
-/** One query: how this agent normally behaves and how humans judged this exact action before. */
-export async function loadStats(agentId: string, actionType: string, target: string | null): Promise<AgentStats> {
+/** One query: how this agent normally behaves and how humans judged this exact action (type, target and payload) before. */
+export async function loadStats(agentId: string, actionType: string, target: string | null, payload: Record<string, unknown>): Promise<AgentStats> {
   const { rows } = await db.query<AgentStats>(
     `SELECT
        count(*)::int                                                              AS total,
@@ -54,12 +59,12 @@ export async function loadStats(agentId: string, actionType: string, target: str
        count(*) FILTER (WHERE time > now() - interval '1 hour')::int              AS last_hour,
        coalesce(extract(epoch FROM now() - min(time)) / 3600, 0)::float8          AS span_hours,
        count(*) FILTER (WHERE action_type = $2 AND target IS NOT DISTINCT FROM $3
-                          AND status = 'approved')::int                           AS approved,
+                          AND payload = $4::jsonb AND status = 'approved')::int                           AS approved,
        count(*) FILTER (WHERE action_type = $2 AND target IS NOT DISTINCT FROM $3
-                          AND status = 'denied' AND decided_by NOT LIKE 'policy:%')::int AS denied
+                          AND payload = $4::jsonb AND status = 'denied' AND decided_by NOT LIKE 'policy:%')::int AS denied
      FROM agent_events
      WHERE agent_id = $1 AND time > now() - interval '${LOOKBACK}'`,
-    [agentId, actionType, target],
+    [agentId, actionType, target, JSON.stringify(payload)],
   );
   return rows[0];
 }

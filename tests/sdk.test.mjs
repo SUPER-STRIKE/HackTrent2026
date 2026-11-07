@@ -1,11 +1,12 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { createServer as createTcp } from "node:net";
 import { spawn } from "node:child_process";
 import { Tripwire, TripwireDenied, TripwireUnavailable, TripwireError } from "../sdk/tripwire.mjs";
 import { wrapTools } from "../sdk/adapters/tools.mjs";
 
-let server, base, flaky = 0, reports = [];
+let server, base, dead, flaky = 0, reports = [];
 
 before(async () => {
   server = createServer((req, res) => {
@@ -23,16 +24,21 @@ before(async () => {
         const b = JSON.parse(body);
         reports.push(b);
         if (b.action_type.endsWith("deny.me")) return send(201, { event_id: "e-deny", status: "denied", risk: { reason: "Blocked by policy" } });
-        if (b.action_type === "risky") return send(201, { event_id: "e-risky", status: "pending", risk: { reason: "r" } });
+        if (b.action_type === "risky" || b.action_type === "mcp.risky") return send(201, { event_id: "e-risky", status: "pending", risk: { reason: "r" } });
         if (b.action_type === "bad") return send(400, { error: "nope" });
         return send(201, { event_id: "e-ok", status: "allowed", risk: {} });
       }
-      if (req.url.startsWith("/api/actions/e-risky")) return send(200, { status: "approved", proceed: true });
+      if (req.url.startsWith("/api/actions/e-risky")) return setTimeout(() => send(200, { status: "approved", proceed: true }), 150);
       send(404, {});
     });
   }).listen(0);
   await new Promise((r) => server.once("listening", r));
   base = `http://127.0.0.1:${server.address().port}`;
+  // A port that was free a moment ago: connecting is refused, so the request provably never arrived.
+  const tmp = createTcp().listen(0);
+  await new Promise((r) => tmp.once("listening", r));
+  dead = `http://127.0.0.1:${tmp.address().port}`;
+  await new Promise((r) => tmp.close(r));
 });
 after(() => server.close());
 
@@ -56,14 +62,13 @@ test("retries transient 503 then succeeds", async () => {
 });
 
 test("fail-closed (default) blocks when Tripwire is unreachable", async () => {
-  const tw = make({ baseUrl: "http://127.0.0.1:1" });
+  const tw = make({ baseUrl: dead });
   let ran = false;
   await assert.rejects(() => tw.guard(act("safe"), () => (ran = true)), TripwireUnavailable);
   assert.equal(ran, false);
 });
 
 test("fail-open runs, allowlist runs only listed actions, per-call override works", async () => {
-  const dead = "http://127.0.0.1:1";
   assert.equal(await make({ baseUrl: dead, failMode: "open" }).guard(act("anything"), () => "ran"), "ran");
 
   const al = make({ baseUrl: dead, failMode: "allowlist", offlineAllow: ["fs.read", /^search\./] });
@@ -75,9 +80,33 @@ test("fail-open runs, allowlist runs only listed actions, per-call override work
   assert.equal(await closed.guard(act("x"), () => "ran", { failMode: "open" }), "ran");
 });
 
+test("a timed-out report never fails open, because the server may have held the action", async () => {
+  const slow = createServer(() => {}).listen(0); // accepts the request and never answers
+  await new Promise((r) => slow.once("listening", r));
+  const tw = make({ baseUrl: `http://127.0.0.1:${slow.address().port}`, failMode: "open", timeoutMs: 150 });
+  let ran = false;
+  await assert.rejects(() => tw.guard(act("anything"), () => (ran = true)), (e) => e instanceof TripwireUnavailable && e.ambiguous === true);
+  assert.equal(ran, false);
+  slow.closeAllConnections();
+  slow.close();
+});
+
+test("oversized and circular payloads are bounded instead of rejected", async () => {
+  reports = [];
+  const tw = make();
+  const circ = { a: 1 };
+  circ.self = circ;
+  await tw.guard({ ...act("safe"), payload: { big: "x".repeat(200_000), circ } }, () => 1);
+  assert.ok(JSON.stringify(reports[0].payload).length < 32 * 1024);
+  assert.equal(reports[0].payload.circ.self, "[circular]");
+  const many = Object.fromEntries(Array.from({ length: 5000 }, (_, i) => [`k${i}`, "y".repeat(100)]));
+  await tw.guard({ ...act("safe"), payload: many }, () => 1);
+  assert.equal(reports[1].payload._truncated, true);
+});
+
 test("onFailMode is told when the safety mode decided", async () => {
   const seen = [];
-  const tw = make({ baseUrl: "http://127.0.0.1:1", failMode: "open", onFailMode: (i) => seen.push(i.allowed) });
+  const tw = make({ baseUrl: dead, failMode: "open", onFailMode: (i) => seen.push(i.allowed) });
   await tw.guard(act("x"), () => 1);
   assert.deepEqual(seen, [true]);
 });
@@ -135,6 +164,53 @@ test("MCP proxy forwards allowed calls and refuses denied ones", async () => {
   assert.equal(byId[2].result.content[0].text, "server:tools/call:safe");
   assert.equal(byId[3].result.isError, true);
   assert.match(byId[3].result.content[0].text, /Blocked by Tripwire/);
+});
+
+const FAKE_MCP = `
+  process.stdin.setEncoding("utf8");
+  let buf = "";
+  process.stdin.on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\\n")) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1);
+    const m = JSON.parse(l); console.log(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: { content: [{ type: "text", text: "server:" + (m.params?.name ?? m.method) }] } })); } });`;
+
+function startProxy() {
+  const p = spawn(process.execPath, ["sdk/adapters/mcp-proxy.mjs", "--", process.execPath, "-e", FAKE_MCP], {
+    env: { ...process.env, TRIPWIRE_URL: base, TRIPWIRE_TOKEN_URL: `${base}/token`, TRIPWIRE_AUDIENCE: "a", TRIPWIRE_CLIENT_ID: "c", TRIPWIRE_CLIENT_SECRET: "s" },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const lines = [];
+  let buf = "", err = "";
+  p.stdout.on("data", (d) => {
+    buf += d;
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); }
+  });
+  p.stderr.on("data", (d) => (err += d));
+  const exited = new Promise((r) => p.on("close", (code) => r({ code, err })));
+  return { p, lines, exited, send: (m) => p.stdin.write(JSON.stringify(m) + "\n") };
+}
+const until = async (cond) => { for (let i = 0; i < 100 && !cond(); i++) await new Promise((r) => setTimeout(r, 50)); };
+
+test("MCP proxy guards tools/call inside a JSON-RPC batch", async () => {
+  const { p, lines, send } = startProxy();
+  send([
+    { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "safe", arguments: {} } },
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "deny.me", arguments: {} } },
+  ]);
+  await until(() => lines.length >= 2);
+  p.kill();
+  const byId = Object.fromEntries(lines.map((l) => [l.id, l]));
+  assert.equal(byId[1].result.content[0].text, "server:safe");
+  assert.equal(byId[2].result.isError, true); // not forwarded to the server
+});
+
+test("MCP proxy answers a held call even when the client closes stdin first", async () => {
+  const { p, lines, exited, send } = startProxy();
+  send({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "risky", arguments: {} } });
+  p.stdin.end();
+  const { code, err } = await exited;
+  assert.equal(lines.find((l) => l.id === 7)?.result.content[0].text, "server:risky");
+  assert.equal(code, 0);
+  assert.equal(err, "");
 });
 
 test("Claude Code hook: allow is silent, deny emits a deny decision", async () => {

@@ -82,7 +82,7 @@ def refund(order_id, amount): ...
 | `allowlist` | Runs only if its action type is in `offlineAllow`; everything else is blocked. |
 | `open` | The action runs. Only for low-stakes agents. |
 
-An outage never lets through an action that is already waiting for a human, and bad credentials or a rejected request are never treated as an outage.
+`open` and `allowlist` apply only when the request provably never reached Tripwire (connection refused, DNS failure, token endpoint down, 429). After a timeout or a 5xx the action may already be held for a human, so it is blocked in every mode. An action already waiting for a human is never let through, and bad credentials or a rejected request are never treated as an outage. Payloads are shortened to fit the 64KB ingest limit instead of being rejected.
 
 **Framework adapters** (`sdk/adapters`)
 
@@ -99,8 +99,8 @@ The command-line adapters read `TRIPWIRE_URL`, `TRIPWIRE_AUTH0_DOMAIN`, `TRIPWIR
 1. **Policies** (your own rules, `/policies`): a `deny` rule blocks at once with no model call; `require_approval` always holds.
 2. **Built-in rules + Gemini**: the higher of the two. Rules are a floor the model cannot talk down.
 3. **Baseline**: with at least 20 events of history, a first-ever action type for the agent adds 0.15 and an activity spike adds 0.10.
-4. **Feedback**: past human decisions on the same action type and target. A denial adds 0.10; three or more approvals and no denial subtracts 0.15. Critical built-in rules and `require_approval` policies are never relaxed.
-5. An `allow` policy caps a non-critical score just under the threshold.
+4. **Feedback**: past human decisions on the same action type, target and payload. A denial adds 0.10; three or more approvals and no denial subtracts 0.15. Critical built-in rules, `require_approval` policies and holds caused by a Gemini outage are never relaxed.
+5. An `allow` policy caps a non-critical score just under the threshold. Because the agent writes its own text, allow rules can only match the whole action type or target, never free text. Patterns with repeated groups that contain repeats or alternatives, and backreferences, are rejected.
 
 Every action stores the factors behind its score, shown as "Why this score" on Approvals and on each incident. Policies that loosen protection (`allow`, or turning off/deleting `deny` and `require_approval`) need a fresh MFA check.
 

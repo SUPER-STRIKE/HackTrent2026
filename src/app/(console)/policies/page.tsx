@@ -12,7 +12,7 @@ const NOTICES: Record<string, { text: string; tone: "ok" | "warn" }> = {
   created: { text: "Policy created. It applies to the next action an agent reports.", tone: "ok" },
   deleted: { text: "Policy deleted.", tone: "ok" },
   invalid: { text: "Check the form: name, effect and match are required.", tone: "warn" },
-  "bad-pattern": { text: "The pattern is empty, too long, or not a valid regular expression.", tone: "warn" },
+  "bad-pattern": { text: "Pattern problem: it must be a valid, simple regular expression (no repeated groups that contain repeats, no backreferences). Allow rules can only match the action type or target.", tone: "warn" },
   "mfa-needed": { text: "MFA verified. Submit the change again to apply it.", tone: "warn" },
   "not-approver": { text: NOT_APPROVER_TEXT, tone: "warn" },
 };
@@ -68,7 +68,7 @@ async function Rules({ searchParams }: { searchParams: PageProps<"/policies">["s
             <select name="effect" defaultValue="require_approval">
               <option value="require_approval">{EFFECT_TEXT.require_approval}</option>
               <option value="deny">{EFFECT_TEXT.deny}</option>
-              <option value="allow">{EFFECT_TEXT.allow} (needs MFA)</option>
+              <option value="allow">{EFFECT_TEXT.allow} (needs MFA, matches the whole action type or target)</option>
             </select>
           </label>
           <label>Only for agent (optional)<input name="agent_id" maxLength={128} placeholder="leave empty for every agent" /></label>

@@ -10,6 +10,9 @@
 //   failMode: "closed"     (default) the action does not run.
 //   failMode: "allowlist"  runs only if actionType matches `offlineAllow` (strings or RegExps), else blocked.
 //   failMode: "open"       the action runs. Use only for low-stakes agents.
+// open and allowlist apply only when the request provably never reached Tripwire (connection refused, DNS
+// failure, token endpoint down, 429). After a timeout or a 5xx the action may already be held for a human,
+// so it is blocked in every mode.
 // A Tripwire outage never lets through an action that is already waiting for a human, and a
 // misconfigured agent (bad credentials, rejected request) is never treated as an outage.
 
@@ -21,11 +24,16 @@ export class TripwireDenied extends Error {
   }
 }
 
-/** Tripwire could not be reached (network error, timeout, 5xx or 429 after retries). */
+/**
+ * Tripwire could not be reached (network error, timeout, 5xx or 429 after retries).
+ * `ambiguous` is true when the request may have reached the server (a timeout, a reset, a 5xx), so the
+ * action may already be recorded and held. Ambiguous failures never fail open.
+ */
 export class TripwireUnavailable extends Error {
-  constructor(message, cause) {
+  constructor(message, cause, ambiguous = false) {
     super(message, { cause });
     this.name = "TripwireUnavailable";
+    this.ambiguous = ambiguous;
   }
 }
 
@@ -36,6 +44,37 @@ export class TripwireError extends Error {
     this.name = "TripwireError";
     this.status = status;
   }
+}
+
+// Errors that prove the request never reached the server.
+const NOT_DELIVERED = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH", "EHOSTUNREACH"]);
+const neverReached = (err) => {
+  const codes = [err?.cause?.code, ...(err?.cause?.errors ?? []).map((e) => e.code)];
+  return codes.length > 0 && codes.every((c) => NOT_DELIVERED.has(c));
+};
+
+const MAX_PAYLOAD_BYTES = 32 * 1024;
+const MAX_STRING = 2000;
+
+/** JSON-safe copy of a payload that fits the server's body limit: long strings and cycles are shortened. */
+export function boundPayload(payload) {
+  const seen = new WeakSet();
+  let json;
+  try {
+    json = JSON.stringify(payload ?? {}, (_k, v) => {
+      if (typeof v === "string" && v.length > MAX_STRING) return `${v.slice(0, MAX_STRING)}...[truncated ${v.length - MAX_STRING} chars]`;
+      if (typeof v === "bigint") return v.toString();
+      if (v && typeof v === "object") {
+        if (seen.has(v)) return "[circular]";
+        seen.add(v);
+      }
+      return v;
+    });
+  } catch {
+    return { _unserializable: true };
+  }
+  if (json === undefined || json.length <= MAX_PAYLOAD_BYTES) return json === undefined ? {} : JSON.parse(json);
+  return { _truncated: true, preview: json.slice(0, MAX_PAYLOAD_BYTES / 2) };
 }
 
 const FAIL_MODES = ["closed", "allowlist", "open"];
@@ -59,11 +98,12 @@ export class Tripwire {
   }
 
   /** One HTTP attempt with a timeout. Network failures and timeouts become TripwireUnavailable. */
-  async #request(url, init) {
+  async #request(url, init, { recordsAction = false } = {}) {
     try {
       return await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(this.timeoutMs) });
     } catch (err) {
-      throw new TripwireUnavailable(`Tripwire: could not reach ${new URL(url).host}`, err);
+      // Only a request that records an action can leave one behind, and only if it may have been delivered.
+      throw new TripwireUnavailable(`Tripwire: could not reach ${new URL(url).host}`, err, recordsAction && !neverReached(err));
     }
   }
 
@@ -101,11 +141,12 @@ export class Tripwire {
       const res = await this.#request(`${this.baseUrl}${path}`, {
         ...init,
         headers: { ...init.headers, authorization: `Bearer ${await this.#accessToken()}`, "content-type": "application/json" },
-      });
+      }, { recordsAction: init.method === "POST" });
       const body = await res.json().catch(() => ({}));
       if (res.status === 401) this.token = null; // the token may have been revoked; fetch a new one next time
       if (isTransient(res.status)) {
-        const err = new TripwireUnavailable(`Tripwire: ${path} failed (${res.status})`);
+        // 429 is refused before anything is recorded; any other 5xx may have happened after the insert.
+        const err = new TripwireUnavailable(`Tripwire: ${path} failed (${res.status})`, undefined, init.method === "POST" && res.status !== 429);
         const ra = Number(res.headers?.get?.("retry-after"));
         if (Number.isFinite(ra) && ra > 0) err.retryAfterMs = Math.min(ra, 30) * 1000;
         throw err;
@@ -119,7 +160,7 @@ export class Tripwire {
   report({ sessionId, actionType, target, payload }) {
     return this.#call("/api/ingest", {
       method: "POST",
-      body: JSON.stringify({ session_id: sessionId, action_type: actionType, target, payload, agent_name: this.agentName }),
+      body: JSON.stringify({ session_id: sessionId, action_type: actionType, target, payload: boundPayload(payload), agent_name: this.agentName }),
     });
   }
 
@@ -155,7 +196,8 @@ export class Tripwire {
     } catch (err) {
       if (!(err instanceof TripwireUnavailable)) throw err;
       const mode = opts.failMode ?? this.failMode;
-      const allowed = this.#offlineDecision(action, mode);
+      // If the request may have arrived, the action could already be held for a human: never run it.
+      const allowed = !err.ambiguous && this.#offlineDecision(action, mode);
       this.onFailMode?.({ action, mode, allowed, error: err });
       if (!allowed) throw err;
       return fn({ event_id: null, status: "unrecorded", offline: true });

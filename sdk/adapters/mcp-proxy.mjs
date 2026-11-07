@@ -30,14 +30,27 @@ child.on("error", (err) => {
 });
 
 const toClient = (msg) => process.stdout.write(JSON.stringify(msg) + "\n");
-const toServer = (msg) => child.stdin.write(JSON.stringify(msg) + "\n");
+// The server may exit while calls are waiting for a human; writing then must not crash the proxy.
+child.stdin.on("error", () => {});
+let serverGone = false;
+child.on("exit", () => (serverGone = true));
+const toServer = (msg) => {
+  if (!serverGone && child.stdin.writable) child.stdin.write(JSON.stringify(msg) + "\n");
+};
 createInterface({ input: child.stdout }).on("line", (line) => process.stdout.write(line + "\n"));
 
 function refuse(id, text) {
   toClient({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text }] } });
 }
 
+let inFlight = 0;
+let clientClosed = false;
+const closeIfIdle = () => {
+  if (clientClosed && inFlight === 0) child.stdin.end();
+};
+
 async function handleToolCall(msg) {
+  inFlight++;
   const { name, arguments: toolArgs } = msg.params ?? {};
   const target = toolArgs?.command ?? toolArgs?.path ?? toolArgs?.url ?? toolArgs?.query ?? undefined;
   try {
@@ -47,17 +60,31 @@ async function handleToolCall(msg) {
     );
   } catch (err) {
     refuse(msg.id, err instanceof TripwireDenied ? `Blocked by Tripwire: ${err.message}` : `Blocked: Tripwire could not approve this call (${err.message})`);
+  } finally {
+    inFlight--;
+    closeIfIdle();
   }
 }
 
+/** Every tools/call is guarded. A JSON-RPC batch is split into single messages so none of its calls can skip the check. */
+function route(msg) {
+  if (Array.isArray(msg)) return msg.forEach(route);
+  if (msg?.method === "tools/call" && msg.id !== undefined && msg.id !== null) handleToolCall(msg);
+  else if (msg?.method !== "tools/call") toServer(msg); // a tools/call without an id expects no answer and is dropped
+}
+
 createInterface({ input: process.stdin }).on("line", (line) => {
+  if (!line.trim()) return;
   let msg;
   try {
     msg = JSON.parse(line);
   } catch {
-    return child.stdin.write(line + "\n");
+    return toClient({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } });
   }
-  if (msg?.method === "tools/call" && msg.id !== undefined) handleToolCall(msg);
-  else child.stdin.write(line + "\n");
+  route(msg);
 });
-process.stdin.on("end", () => child.stdin.end());
+// Close the server's input only after every guarded call has been answered.
+process.stdin.on("end", () => {
+  clientClosed = true;
+  closeIfIdle();
+});

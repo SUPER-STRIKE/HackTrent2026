@@ -1,4 +1,5 @@
 import json
+import socket
 import sys
 import threading
 import unittest
@@ -58,6 +59,14 @@ class SdkTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.srv.shutdown()
 
+    @staticmethod
+    def dead_url():
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+        s.close()
+        return f"http://127.0.0.1:{port}"
+
     def make(self, **kw):
         kw.setdefault("base_url", self.base)
         return Tripwire(token_url=f"{self.base}/token", audience="a", client_id="c", client_secret="s", retries=0, **kw)
@@ -78,7 +87,7 @@ class SdkTest(unittest.TestCase):
         self.assertEqual(tw.run(lambda: "ok", "s", "safe"), "ok")
 
     def test_fail_modes(self):
-        dead = "http://127.0.0.1:1"
+        dead = self.dead_url()
         with self.assertRaises(TripwireUnavailable):
             self.make(base_url=dead).run(lambda: 1, "s", "x")
         self.assertEqual(self.make(base_url=dead, fail_mode="open").run(lambda: "ran", "s", "x"), "ran")
@@ -86,6 +95,28 @@ class SdkTest(unittest.TestCase):
         self.assertEqual(al.run(lambda: "ran", "s", "fs_read"), "ran")
         with self.assertRaises(TripwireUnavailable):
             al.run(lambda: "ran", "s", "fs_delete")
+
+    def test_timeout_never_fails_open(self):
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)  # accepts the connection (backlog) and never answers
+        tw = self.make(base_url=f"http://127.0.0.1:{srv.getsockname()[1]}", fail_mode="open", timeout=0.3)
+        ran = []
+        with self.assertRaises(TripwireUnavailable) as cm:
+            tw.run(lambda: ran.append(1), "s", "x")
+        srv.close()
+        self.assertTrue(cm.exception.ambiguous)
+        self.assertEqual(ran, [])
+
+    def test_payload_is_bounded(self):
+        from tripwire import _bound_payload
+
+        circ = {"a": 1}
+        circ["self"] = circ
+        out = _bound_payload({"big": "x" * 200000, "circ": circ, "obj": object()})
+        self.assertLess(len(json.dumps(out)), 32 * 1024)
+        self.assertEqual(out["circ"]["self"], "[circular]")
+        self.assertTrue(_bound_payload({f"k{i}": "y" * 100 for i in range(5000)})["_truncated"])
 
     def test_rejected_request_never_fails_open(self):
         with self.assertRaises(TripwireError):
