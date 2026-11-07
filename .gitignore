@@ -10,3 +10,10 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# AI agent files (kept local, not pushed)
+CLAUDE.md
+AGENTS.md
+WORKFLOW.md
+.claude/
+.entire/
