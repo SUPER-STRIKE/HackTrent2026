@@ -1,0 +1,21 @@
+well i think we done our project so what we can do to enhance the ultility of the project
+
+---
+
+tieng viet
+
+---
+
+lam sdk la sao
+
+---
+
+adapter de lam gi
+
+---
+
+ok tao sdk, tich hop framework, safety mode, self ruled, baseline,  loop response va giai thich diem so di da
+
+---
+
+Commit the working tree changes with a sensible message.

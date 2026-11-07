@@ -1,0 +1,71 @@
+{
+  "cli_version": "0.13.1",
+  "checkpoint_id": "01M6V68ECDAD1R0W9AJHBEWVY8",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 5,
+  "files_touched": [
+    ".gitignore",
+    "README.md",
+    "db/schema.sql",
+    "package.json",
+    "sdk/adapters/claude-code-hook.mjs",
+    "sdk/adapters/mcp-proxy.mjs",
+    "sdk/adapters/tools.d.mts",
+    "sdk/adapters/tools.mjs",
+    "sdk/env.mjs",
+    "sdk/package.json",
+    "sdk/python/pyproject.toml",
+    "sdk/python/tests/test_tripwire.py",
+    "sdk/python/tripwire/__init__.py",
+    "sdk/tripwire.d.mts",
+    "sdk/tripwire.mjs",
+    "src/app/(console)/approvals/page.tsx",
+    "src/app/(console)/incidents/[id]/page.tsx",
+    "src/app/(console)/policies/actions.ts",
+    "src/app/(console)/policies/page.tsx",
+    "src/app/api/ingest/route.ts",
+    "src/app/globals.css",
+    "src/components/nav.tsx",
+    "src/components/ui.tsx",
+    "src/lib/dashboard.ts",
+    "src/lib/events.ts",
+    "src/lib/incidents.ts",
+    "src/lib/policy.ts",
+    "src/lib/risk.ts",
+    "src/lib/scoring-core.ts",
+    "tests/scoring-core.test.ts",
+    "tests/sdk.test.mjs",
+    "tsconfig.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 80,
+    "cache_creation_tokens": 124957,
+    "cache_read_tokens": 4353683,
+    "output_tokens": 63696,
+    "api_call_count": 36
+  },
+  "redaction": {
+    "replacements": 14,
+    "layers": {
+      "betterleaks": 0,
+      "connection_string": 0,
+      "credential_key": 0,
+      "credential_value": 9,
+      "credentialed_uri": 0,
+      "entropy": 0,
+      "key_context": 5,
+      "provider_token": 0,
+      "shell_stdin": 0
+    }
+  }
+}
