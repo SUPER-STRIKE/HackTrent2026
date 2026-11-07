@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { auth0 } from "@/lib/auth0";
 import { BrandMark } from "@/components/rail";
 import { Recorder } from "@/components/recorder";
+import { Disasters } from "@/components/disasters";
 
 export const instant = false;
 
@@ -36,6 +37,8 @@ export default function Home() {
           <li><b>Hold</b><span>Anything over the tripwire pauses for a human.</span></li>
           <li><b>Approve</b><span>An approver confirms with MFA. Every step is logged.</span></li>
         </ol>
+
+        <Disasters />
       </main>
     </div>
   );

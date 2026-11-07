@@ -1,0 +1,35 @@
+[
+  {
+    "id": "knight-capital",
+    "year": 2012,
+    "title": "Knight Capital's runaway trading",
+    "short": "Knight Capital",
+    "category": "config",
+    "impact": { "value": "$440M", "label": "lost in 45 minutes" },
+    "cause": "A deployment missed one of eight servers. A reused feature flag then switched on old Power Peg test code on that server, and it sent millions of unintended orders into the market.",
+    "guardrail": "A circuit breaker that halts trading once losses pass a set limit, plus a check that every server runs the same build.",
+    "source": "https://www.sec.gov/litigation/admin/2013/34-70694.pdf"
+  },
+  {
+    "id": "gitlab-db1",
+    "year": 2017,
+    "title": "GitLab deletes its production database",
+    "short": "GitLab",
+    "category": "cli",
+    "impact": { "value": "300 GB", "label": "of production data deleted" },
+    "command": "rm -rf /var/opt/gitlab/postgresql/data",
+    "cause": "Fixing replication late at night, an engineer ran the delete on the primary, db1, instead of the replica, db2. The backups turned out not to work, and about six hours of data were lost.",
+    "guardrail": "Hold destructive commands on production hosts until a second person approves, and test backups by restoring them.",
+    "source": "https://about.gitlab.com/blog/2017/02/10/postmortem-of-database-outage-of-january-31/"
+  },
+  {
+    "id": "hawaii-alert",
+    "year": 2018,
+    "title": "Hawaii's false missile alert",
+    "short": "Hawaii alert",
+    "category": "config",
+    "impact": { "value": "38 min", "label": "before a correction reached phones" },
+    "cause": "During a drill, the live ballistic missile alert went out instead of a test. Both options sat in the same plain list behind the same confirmation prompt, and no retraction message was ready.",
+    "guardrail": "Keep drill and live paths separate, and require a second approver before a statewide alert is sent."
+  }
+]
