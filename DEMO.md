@@ -51,6 +51,8 @@ Shows that Tripwire guards an agent people already use, with no code changes to 
 The same idea works for any MCP server: `node sdk/adapters/mcp-proxy.mjs -- <server command>`.
 
 ## Before going on stage
+- If Gemini quota is a risk, set `RISK_MODEL=off` in `.env.local` and restart. Scoring then uses the built-in rules and
+  your policies only, so the scenario is identical every run. Keep Gemini for the Investigator and summaries.
 - `npm run db:migrate && npm run db:seed`, then reload `/approvals` and open "Why this score" on case 10.
 - Delete any leftover policies on `/policies` so the live scene starts clean.
 - Keep a short screen recording of steps 3 to 4 as a backup in case the network fails.

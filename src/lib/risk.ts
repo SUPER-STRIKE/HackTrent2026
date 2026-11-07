@@ -7,7 +7,8 @@
  *  2. Gemini scores the action in context. The final score is max(rules, gemini).
  *
  * If Gemini is configured but fails, the action is held for review (fail closed).
- * If GEMINI_API_KEY is not set, rules alone decide (local development).
+ * If GEMINI_API_KEY is not set, or RISK_MODEL=off, rules alone decide (local development, or a demo
+ * that must not depend on Gemini quota).
  */
 
 import { levelFor, type BaseScore, type RiskFactor, type RiskLevel } from "@/lib/scoring-core";
@@ -134,7 +135,7 @@ async function scoreWithGemini(action: ActionInput, apiKey: string): Promise<{ s
 export async function scoreAction(action: ActionInput): Promise<BaseScore & { rulesScore: number }> {
   const rules = scoreByRules(action);
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { ...rules, rulesScore: rules.score };
+  if (!apiKey || process.env.RISK_MODEL === "off") return { ...rules, rulesScore: rules.score };
 
   try {
     const g = await scoreWithGemini(action, apiKey);

@@ -39,7 +39,7 @@ See [`.env.example`](.env.example) for the full list. The main groups are:
 
 - **Auth0**: `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_SECRET`, `APP_BASE_URL`, `AUTH0_AUDIENCE`, `AUTH0_AGENT_CLIENT_IDS`, `APPROVER_EMAILS`
 - **Database**: `DATABASE_URL` (and optional `DATABASE_CA`)
-- **Gemini**: `GEMINI_API_KEY`, optional `GEMINI_MODEL` and `RISK_THRESHOLD` (default 0.7)
+- **Gemini**: `GEMINI_API_KEY`, optional `GEMINI_MODEL` and `RISK_THRESHOLD` (default 0.7). Set `RISK_MODEL=off` to score with built-in rules and policies only (no Gemini call, so no quota use and identical results every run); the Investigator and incident summaries still use Gemini
 - **Demo mode**: `DEMO_MODE`, `DEMO_INTERVAL_SECONDS`
 
 ## Scripts
