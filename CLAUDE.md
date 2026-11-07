@@ -9,7 +9,7 @@ How the tools fit:
 Auth0: login, agent tokens, and step-up MFA to approve risky actions.
 Tiger Data: a hypertable of agent events, with continuous aggregates powering the live dashboard.
 Gemini: risk scoring, an “Investigator” chat, incident summaries and similar-incident search.
-Vultr + GoDaddy: the app runs in Docker on a Vultr VM at your custom domain.
+Vercel + GoDaddy: the app is deployed on Vercel at your custom domain (GoDaddy DNS).
 Entire: records every Claude Code session as checkpoints while you build, which gives you a “built with agents, fully auditable” slide.
 
 Platform: web app (Next.js), plus a tiny agent SDK for the demo.
