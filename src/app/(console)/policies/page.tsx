@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
-import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
+import { canView, isApprover, NOT_APPROVER_TEXT, VIEWER_TEXT } from "@/lib/approvers";
 import { listAgents, listPolicies } from "@/lib/policy";
 import { NotApprover, PageHead } from "@/components/ui";
 import { createPolicyAction, deletePolicyAction, togglePolicyAction } from "./actions";
@@ -41,7 +41,8 @@ export default function PoliciesPage({ searchParams }: PageProps<"/policies">) {
 async function Rules({ searchParams }: { searchParams: PageProps<"/policies">["searchParams"] }) {
   const session = await auth0.getSession();
   if (!session) redirect("/auth/login?returnTo=/policies");
-  if (!isApprover(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
+  if (!canView(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
+  const approver = isApprover(session.user);
 
   const params = await searchParams;
   const n = Array.isArray(params.notice) ? params.notice[0] : params.notice;
@@ -51,8 +52,9 @@ async function Rules({ searchParams }: { searchParams: PageProps<"/policies">["s
   return (
     <div className="stack">
       {notice && <p className={`notice ${notice.tone}`}>{notice.text}</p>}
+      {!approver && <p className="notice warn">{VIEWER_TEXT}</p>}
 
-      <section className="panel">
+      {approver && <section className="panel">
         <div className="panel-head"><h2>New policy</h2><span className="meta">pattern is a case-insensitive regular expression</span></div>
         <form action={createPolicyAction} className="policy-form">
           <label>Name<input name="name" required maxLength={80} placeholder="No refunds over the weekend" /></label>
@@ -81,7 +83,7 @@ async function Rules({ searchParams }: { searchParams: PageProps<"/policies">["s
           </label>
           <div><button className="btn btn-primary">Create policy</button></div>
         </form>
-      </section>
+      </section>}
 
       <section className="panel">
         <div className="panel-head"><h2>Active rules</h2><span className="meta">{rules.length} total</span></div>
@@ -94,7 +96,7 @@ async function Rules({ searchParams }: { searchParams: PageProps<"/policies">["s
               <span>{EFFECT_TEXT[r.effect]} · {r.match_on === "any" ? "anything" : r.match_on} · {r.agent_id ?? "all agents"}</span>
               <code>{r.pattern}</code>
               {r.reason && <span>{r.reason}</span>}
-              <div className="actions" style={{ marginTop: 6 }}>
+              {approver && <div className="actions" style={{ marginTop: 6 }}>
                 <form action={togglePolicyAction}>
                   <input type="hidden" name="id" value={r.id} />
                   <input type="hidden" name="enable" value={r.enabled ? "0" : "1"} />
@@ -104,7 +106,7 @@ async function Rules({ searchParams }: { searchParams: PageProps<"/policies">["s
                   <input type="hidden" name="id" value={r.id} />
                   <button className="btn btn-sm btn-danger">Delete</button>
                 </form>
-              </div>
+              </div>}
             </div>
           ))
         )}

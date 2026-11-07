@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
-import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
+import { canView, NOT_APPROVER_TEXT } from "@/lib/approvers";
 import { ensureDemoData } from "@/lib/demo";
 import { listIncidents } from "@/lib/incidents";
 import { NotApprover, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
@@ -23,7 +23,7 @@ export default function IncidentsPage() {
 async function List() {
   const session = await auth0.getSession();
   if (!session) redirect("/auth/login?returnTo=/incidents");
-  if (!isApprover(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
+  if (!canView(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
   await ensureDemoData();
   const incidents = await listIncidents();
   return (

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
-import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
+import { canView, NOT_APPROVER_TEXT } from "@/lib/approvers";
 import { NotApprover, PageHead } from "@/components/ui";
 import { Chat } from "./chat";
 
@@ -21,6 +21,6 @@ export default function InvestigatorPage() {
 async function Gate() {
   const session = await auth0.getSession();
   if (!session) redirect("/auth/login?returnTo=/investigator");
-  if (!isApprover(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
+  if (!canView(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
   return <Chat />;
 }

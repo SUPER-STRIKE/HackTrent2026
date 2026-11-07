@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
-import { isApprover } from "@/lib/approvers";
+import { canView, isApprover, NOT_APPROVER_TEXT, VIEWER_TEXT } from "@/lib/approvers";
 import { listPending, listRecentDecisions, type AgentEvent } from "@/lib/events";
 import { ensureDemoData } from "@/lib/demo";
 import { stepUpState, type StepUpState } from "@/lib/step-up";
-import { WhyScore, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
+import { NotApprover, WhyScore, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
 import { approveAction, denyAction } from "./actions";
 
 export const instant = false;
@@ -33,6 +33,8 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
   const session = await auth0.getSession();
   if (!session) redirect("/auth/login?returnTo=/approvals");
 
+  if (!canView(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
+
   const params = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const notice = NOTICES[one(params.notice) ?? ""];
@@ -49,7 +51,7 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
   return (
     <div className="stack">
       {mfaProblem ? <p className="notice warn">{mfaProblem}</p> : notice && <p className={`notice ${notice.tone}`}>{notice.text}</p>}
-      {!approver && !notice && <p className="notice warn">{NOTICES["not-approver"].text}</p>}
+      {!approver && !notice && <p className="notice warn">{VIEWER_TEXT}</p>}
 
       <section className="panel">
         <div className="panel-head">
