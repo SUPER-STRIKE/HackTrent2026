@@ -22,7 +22,7 @@ export default function ApprovalsPage({ searchParams }: PageProps<"/approvals">)
   return (
     <>
       <PageHead title="Approvals" sub="Risky agent actions wait here. Approving needs a fresh MFA check." />
-      <Suspense fallback={<p className="mono-dim">Loading…</p>}>
+      <Suspense fallback={<p className="loading">Loading…</p>}>
         <Queue searchParams={searchParams} />
       </Suspense>
     </>
@@ -79,7 +79,7 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
                 <span className="act">{e.action_type}</span>
                 {e.target && <span className="tgt">{e.target}</span>}
                 <span className="who">by {e.decided_by}</span>
-                <span className="end mono-dim">{e.decided_at ? new Date(e.decided_at).toLocaleString() : ""}</span>
+                <span className="end who">{e.decided_at ? new Date(e.decided_at).toLocaleString() : ""}</span>
               </li>
             ))}
           </ul>
@@ -91,15 +91,14 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
 
 function PendingCard({ event: e, canDecide, confirming }: { event: AgentEvent; canDecide: boolean; confirming: boolean }) {
   const payload = JSON.stringify(e.payload, null, 2);
-  const rail = e.risk_level === "critical" ? "crit" : e.risk_level === "high" ? "high" : "med";
   return (
-    <li className={`pending ${confirming ? "confirming" : ""}`} style={{ ["--rail" as string]: `var(--sig-${rail})` }}>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+    <li className={`pending ${railClass(e.risk_level)} ${confirming ? "confirming" : ""}`}>
+      <div className="pending-top">
         <RiskBadge level={e.risk_level} score={e.risk_score} />
         <span className="act">{e.action_type}</span>
         {e.target && <span className="tgt">{e.target}</span>}
       </div>
-      {e.risk_reason && <p style={{ margin: "8px 0 0" }}>{e.risk_reason}</p>}
+      {e.risk_reason && <p className="reason">{e.risk_reason}</p>}
       <dl className="kv">
         <dt>Agent</dt><dd>{e.agent_name ?? e.agent_id}</dd>
         <dt>Session</dt><dd>{e.session_id}</dd>

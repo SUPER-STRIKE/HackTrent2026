@@ -42,7 +42,7 @@ export function LiveDashboard({ initial }: { initial: DashboardData }) {
   const t = data.totals;
   return (
     <div className="stack">
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <div className="toolbar">
         <span className={`live ${error ? "down" : ""}`} role="status">
           <i />
           {error ? "Connection lost, retrying" : `Live, updated ${new Date(data.generated_at).toLocaleTimeString()}`}
@@ -53,7 +53,7 @@ export function LiveDashboard({ initial }: { initial: DashboardData }) {
         <Metric label="Actions, last hour" value={t.events_1h} />
         <Metric label="High risk" value={t.risky_1h} tone={t.risky_1h ? "warn" : undefined} />
         <Metric label="Denied" value={t.denied_1h} tone={t.denied_1h ? "bad" : undefined} />
-        <Metric label="Waiting for approval" value={t.pending_now} tone={t.pending_now ? "warn" : undefined} href="/approvals" />
+        <Metric label="Waiting for approval" value={t.pending_now} tone={t.pending_now ? "tripped" : undefined} href="/approvals" />
         <Metric label="Average risk" value={t.avg_risk_1h === null ? "–" : t.avg_risk_1h.toFixed(2)} />
       </div>
 
@@ -75,9 +75,9 @@ export function LiveDashboard({ initial }: { initial: DashboardData }) {
         <div className="panel-body">
           <VolumeChart buckets={data.per_minute} now={data.generated_at} />
           <div className="legend">
-            <span><i style={{ background: "#3b4a62" }} />Normal</span>
-            <span><i style={{ background: "var(--sig-high)" }} />High risk</span>
-            <span><i style={{ background: "var(--sig-crit)" }} />Denied minute</span>
+            <span><i style={{ background: "#8fa597" }} />Normal</span>
+            <span><i style={{ background: "var(--orange)" }} />High risk</span>
+            <span><i style={{ background: "var(--crit)" }} />Minute with a denial</span>
           </div>
         </div>
       </section>
@@ -100,7 +100,7 @@ export function LiveDashboard({ initial }: { initial: DashboardData }) {
       <section className="panel">
         <div className="panel-head"><h2>Event stream</h2><span className="meta">latest {data.feed.length}</span></div>
         {data.feed.length === 0 ? (
-          <p className="empty">No agent activity yet. Run an agent, or use npm run simulate.</p>
+          <p className="empty">No agent activity yet. Run an agent, or use <code>npm run simulate</code>.</p>
         ) : (
           <ul className="log">
             {data.feed.map((e) => (
@@ -122,7 +122,7 @@ export function LiveDashboard({ initial }: { initial: DashboardData }) {
   );
 }
 
-function Metric({ label, value, tone, href }: { label: string; value: number | string; tone?: "warn" | "bad"; href?: string }) {
+function Metric({ label, value, tone, href }: { label: string; value: number | string; tone?: "warn" | "bad" | "tripped"; href?: string }) {
   const body = (
     <>
       <div className="v">{value}</div>
@@ -139,55 +139,63 @@ function slotsFor(buckets: MinuteBucket[], now: string): (MinuteBucket | null)[]
 }
 
 const W = 720;
+const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(2)}%`;
 
 /** Peak risk per minute against the line where Tripwire holds an action for approval. */
 function RiskTrace({ buckets, now, threshold }: { buckets: MinuteBucket[]; now: string; threshold: number }) {
-  const H = 130;
+  const H = 100;
   const series = slotsFor(buckets, now);
   const x = (i: number) => (i + 0.5) * (W / SLOTS);
   const y = (v: number) => H - v * H;
   const pts = series.map((b, i) => (b && b.max_risk !== null ? { i, v: b.max_risk } : null)).filter((p): p is { i: number; v: number } => p !== null);
   return (
-    <svg viewBox={`0 0 ${W} ${H + 16}`} className="chart" role="img" aria-label={`Peak risk per minute over the last hour. Actions at or above ${threshold.toFixed(2)} are held.`}>
-      {[0.25, 0.5, 0.75].map((g) => <line key={g} className="grid" x1={0} x2={W} y1={y(g)} y2={y(g)} />)}
-      <line className="limit" x1={0} x2={W} y1={y(threshold)} y2={y(threshold)} />
-      <text className="limit-label" x={W - 2} y={y(threshold) - 4} textAnchor="end">hold {threshold.toFixed(2)}</text>
-      {pts.length > 1 && <polyline className="trace" points={pts.map((p) => `${x(p.i)},${y(p.v)}`).join(" ")} />}
-      {pts.map((p) => <circle key={p.i} className={`dot ${p.v >= threshold ? "over" : ""}`} cx={x(p.i)} cy={y(p.v)} r={p.v >= threshold ? 3.5 : 2.5} />)}
-      <text x={2} y={H + 13}>-60m</text>
-      <text x={W - 2} y={H + 13} textAnchor="end">now</text>
-    </svg>
+    <>
+      <div className="plot">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Peak risk per minute over the last hour. Actions at or above ${threshold.toFixed(2)} are held.`}>
+          <line className="limit" x1={0} x2={W} y1={y(threshold)} y2={y(threshold)} vectorEffect="non-scaling-stroke" />
+          {pts.length > 1 && <polyline className="trace" points={pts.map((p) => `${x(p.i)},${y(p.v)}`).join(" ")} vectorEffect="non-scaling-stroke" />}
+          {pts.map((p) => (
+            <path key={p.i} className={`dot ${p.v >= threshold ? "over" : ""}`} d={`M${x(p.i)} ${y(p.v)}h0.01`} vectorEffect="non-scaling-stroke" />
+          ))}
+        </svg>
+        <span className="plot-label" style={{ top: pct(y(threshold), H) }}>Tripwire {threshold.toFixed(2)}</span>
+      </div>
+      <div className="plot-axis" aria-hidden="true"><span>60 min ago</span><span>Now</span></div>
+    </>
   );
 }
 
 function VolumeChart({ buckets, now }: { buckets: MinuteBucket[]; now: string }) {
-  const H = 90;
+  const H = 100;
   const series = slotsFor(buckets, now);
   const max = Math.max(1, ...series.map((b) => b?.events ?? 0));
   const bw = W / SLOTS;
+  const top = H - 8;
   return (
-    <svg viewBox={`0 0 ${W} ${H + 22}`} className="chart" role="img" aria-label="Actions per minute over the last hour">
-      <line className="grid" x1={0} x2={W} y1={H} y2={H} />
-      {series.map((b, i) => {
-        if (!b) return null;
-        const total = (b.events / max) * H;
-        const risky = (b.risky / max) * H;
-        return (
-          <g key={i}>
-            <rect className="safe" x={i * bw + 1} y={H - total} width={bw - 2} height={total - risky} />
-            <rect className="risky" x={i * bw + 1} y={H - risky} width={bw - 2} height={risky} />
-            {b.denied > 0 && <rect className="denied" x={i * bw + 1} y={H + 3} width={bw - 2} height={4} />}
-          </g>
-        );
-      })}
-      <text x={2} y={H + 18}>-60m</text>
-      <text x={W - 2} y={H + 18} textAnchor="end">now, peak {max}/min</text>
-    </svg>
+    <>
+      <div className="plot short">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Actions per minute over the last hour, peak ${max} per minute`}>
+          {series.map((b, i) => {
+            if (!b) return null;
+            const total = (b.events / max) * top;
+            const risky = (b.risky / max) * top;
+            return (
+              <g key={i}>
+                <rect className="safe" x={i * bw + 1.5} y={top - total} width={bw - 3} height={total - risky} />
+                <rect className="risky" x={i * bw + 1.5} y={top - risky} width={bw - 3} height={risky} />
+                {b.denied > 0 && <rect className="denied" x={i * bw + 1.5} y={top + 3} width={bw - 3} height={5} />}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="plot-axis" aria-hidden="true"><span>60 min ago</span><span>Now, peak {max} per minute</span></div>
+    </>
   );
 }
 
 function Bars({ rows }: { rows: { label: string; value: number; extra: string }[] }) {
-  if (rows.length === 0) return <p className="mono-dim">No data yet.</p>;
+  if (rows.length === 0) return <p className="loading" style={{ margin: 0 }}>No data yet.</p>;
   const max = Math.max(...rows.map((r) => r.value));
   return (
     <ul className="bars">

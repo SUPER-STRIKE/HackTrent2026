@@ -1,25 +1,23 @@
-import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
-import { Rail } from "@/components/rail";
+import type { Metadata, Viewport } from "next";
+import { Archivo, Martian_Mono } from "next/font/google";
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({ variable: "--font-plex-sans", subsets: ["latin"], weight: ["400", "500", "600"] });
-const plexMono = IBM_Plex_Mono({ variable: "--font-plex-mono", subsets: ["latin"], weight: ["400", "500"] });
+const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], axes: ["wdth"] });
+const martian = Martian_Mono({ variable: "--font-martian", subsets: ["latin"], axes: ["wdth"] });
 
 export const metadata: Metadata = {
   title: "Tripwire",
   description: "Flight recorder and seatbelt for AI agents.",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#13211a",
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
-      <body>
-        <div className="shell">
-          <Rail />
-          <div className="page">{children}</div>
-        </div>
-      </body>
+    <html lang="en" className={`${archivo.variable} ${martian.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

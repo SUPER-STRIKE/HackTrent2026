@@ -12,7 +12,7 @@ export default function DashboardPage() {
   return (
     <>
       <PageHead title="Dashboard" sub="What your agents are doing right now." />
-      <Suspense fallback={<p className="mono-dim">Loading…</p>}>
+      <Suspense fallback={<p className="loading">Loading…</p>}>
         <Content />
       </Suspense>
     </>

@@ -48,8 +48,8 @@ export function Chat() {
       </div>
       <div className="chat-log" aria-live="polite">
         {messages.length === 0 && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
-            <p className="mono-dim" style={{ margin: 0 }}>Ask a question, or start with one of these.</p>
+          <div className="chat-intro">
+            <p>Ask a question, or start with one of these.</p>
             {SUGGESTIONS.map((s) => (
               <button key={s} onClick={() => void send(s)} className="chip">{s}</button>
             ))}
@@ -61,7 +61,7 @@ export function Chat() {
             {m.text}
           </div>
         ))}
-        {busy && <p className="mono-dim" style={{ margin: 0 }}>Investigating…</p>}
+        {busy && <p className="loading" style={{ margin: 0 }}>Investigating…</p>}
         <div ref={endRef} />
       </div>
       <form

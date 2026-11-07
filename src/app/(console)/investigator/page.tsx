@@ -11,7 +11,7 @@ export default function InvestigatorPage() {
   return (
     <>
       <PageHead title="Investigator" sub="Ask what your agents did. Answers come from the audit log." />
-      <Suspense fallback={<p className="mono-dim">Loading…</p>}>
+      <Suspense fallback={<p className="loading">Loading…</p>}>
         <Gate />
       </Suspense>
     </>

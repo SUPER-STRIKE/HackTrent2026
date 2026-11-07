@@ -13,7 +13,7 @@ export default function IncidentsPage() {
   return (
     <>
       <PageHead title="Incidents" sub="Actions that were high risk, held or denied. Open one for a summary and similar past cases." />
-      <Suspense fallback={<p className="mono-dim">Loading…</p>}>
+      <Suspense fallback={<p className="loading">Loading…</p>}>
         <List />
       </Suspense>
     </>

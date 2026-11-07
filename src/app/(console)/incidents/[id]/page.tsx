@@ -13,9 +13,9 @@ export default function IncidentPage({ params }: PageProps<"/incidents/[id]">) {
   return (
     <>
       <PageHead title="Incident">
-        <Link className="btn" href="/incidents">All incidents</Link>
+        <Link className="btn btn-sm" href="/incidents">All incidents</Link>
       </PageHead>
-      <Suspense fallback={<p className="mono-dim">Loading…</p>}>
+      <Suspense fallback={<p className="loading">Loading…</p>}>
         <Detail params={params} />
       </Suspense>
     </>
@@ -39,13 +39,13 @@ async function Detail({ params }: { params: PageProps<"/incidents/[id]">["params
           <h2>Action</h2>
           <StatusTag status={event.status} />
         </div>
-        <div className="panel-body" style={{ borderLeft: `3px solid var(--sig-${event.risk_level === "critical" ? "crit" : event.risk_level === "high" ? "high" : event.risk_level === "medium" ? "med" : "low"})` }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+        <div className={`pending ${railClass(event.risk_level)}`}>
+          <div className="pending-top">
             <RiskBadge level={event.risk_level} score={event.risk_score} />
-            <span className="data" style={{ fontWeight: 500 }}>{event.action_type}</span>
-            {event.target && <span className="data" style={{ color: "var(--dim)" }}>{event.target}</span>}
+            <span className="act">{event.action_type}</span>
+            {event.target && <span className="tgt">{event.target}</span>}
           </div>
-          {event.risk_reason && <p style={{ margin: "8px 0 0" }}>{event.risk_reason}</p>}
+          {event.risk_reason && <p className="reason">{event.risk_reason}</p>}
           <dl className="kv">
             <dt>Agent</dt><dd>{event.agent_name ?? event.agent_id}</dd>
             <dt>Session</dt><dd>{event.session_id}</dd>
@@ -60,7 +60,7 @@ async function Detail({ params }: { params: PageProps<"/incidents/[id]">["params
       <section className="panel">
         <div className="panel-head"><h2>Summary</h2><span className="meta">written by Gemini</span></div>
         <div className="panel-body">
-          <Suspense fallback={<p className="mono-dim">Writing the summary…</p>}>
+          <Suspense fallback={<p className="loading" style={{ margin: 0 }}>Writing the summary…</p>}>
             <Summary id={id} />
           </Suspense>
         </div>
@@ -79,13 +79,13 @@ async function Detail({ params }: { params: PageProps<"/incidents/[id]">["params
 async function Summary({ id }: { id: string }) {
   const event = await getEvent(id);
   if (!event) return null;
-  if (!geminiConfigured()) return <p className="mono-dim">Set GEMINI_API_KEY to get AI summaries.</p>;
+  if (!geminiConfigured()) return <p className="loading" style={{ margin: 0 }}>Set GEMINI_API_KEY to get AI summaries.</p>;
   const text = await summarizeIncident(event, await getSessionContext(event)).catch((err) => {
     console.error("incident summary failed", err instanceof Error ? err.message : err);
     return null;
   });
   if (text === null) return <p className="notice warn">The summary is unavailable right now. Reload to retry.</p>;
-  return <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{text}</p>;
+  return <p className="summary">{text}</p>;
 }
 
 async function Similar({ id }: { id: string }) {
@@ -98,7 +98,7 @@ async function Similar({ id }: { id: string }) {
       {similar.map(({ event: e, similarity }) => (
         <li key={e.id}>
           <Link href={`/incidents/${e.id}`} className={`row ${railClass(e.risk_level)}`}>
-            <span className="time">{Math.round(similarity * 100)}%</span>
+            <span className="sim">{Math.round(similarity * 100)}%</span>
             <span className="act">{e.action_type}</span>
             {e.target && <span className="tgt">{e.target}</span>}
             <span className="end"><StatusTag status={e.status} /></span>
