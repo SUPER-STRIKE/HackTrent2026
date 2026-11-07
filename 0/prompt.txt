@@ -1,0 +1,231 @@
+Sign-in finished but Auth0 did not report MFA for this login (amr: none). In Auth0, check that an MFA factor is enabled, the step-up Action is deployed and added to the Login flow, and your user is enrolled in MFA.
+
+---
+
+nhung moi khi can approve lai can dang nhap lai hoi phien nhi
+
+---
+
+vay ve co ban la hoat dong ok roi dung k, khi demo chung ta se lam gi nao
+
+---
+
+mfa chay roi, risk model off thi don gian, deploy auto roi, k can godaddy ten mien lam gi, test policy nhu nao
+
+---
+
+tu tu trong simulate chinh cac action ma no revoke o file nao vay, do mai toi chua thay no goi no outbound calls
+
+---
+
+<pasted_content id="1322">
+[10:18:07 AM] Tripwire demo, session demo-202611071518
+[10:18:09 AM] normal    fs.read README.md
+[10:18:10 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:18:10 AM]   ran: fs.read
+[10:18:13 AM] normal    shell.exec npm test
+[10:18:13 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:18:13 AM]   ran: shell.exec
+[10:18:16 AM] normal    db.query SELECT count(*) FROM orders
+[10:18:16 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:18:16 AM]   ran: db.query
+[10:18:19 AM] normal    http.get https://api.internal/health
+[10:18:19 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:18:19 AM]   ran: http.get
+[10:18:22 AM] normal    fs.write src/feature.ts
+[10:18:22 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:18:22 AM]   ran: fs.write
+[10:18:25 AM] normal    git.commit feat: add retry logic
+[10:18:25 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:18:25 AM]   ran: git.commit
+[10:18:28 AM] normal    shell.exec npm run build
+[10:18:28 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:18:28 AM]   ran: shell.exec
+[10:18:28 AM] The agent now attempts something dangerous. Approve (or deny) it in /approvals.
+[10:18:58 AM] RISKY     db.execute production
+[10:18:59 AM]   risk 1.00 (critical): Destructive database statement -> pending
+[10:19:25 AM]   waiting for a human to approve with MFA...
+[10:19:51 AM]   waiting for a human to approve with MFA...
+[10:20:16 AM]   waiting for a human to approve with MFA...
+[10:20:42 AM]   waiting for a human to approve with MFA...
+[10:21:08 AM]   waiting for a human to approve with MFA...
+[10:21:11 AM]   ran: db.execute
+[10:21:14 AM] after     fs.read docs/runbook.md
+[10:21:14 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:21:14 AM]   ran: fs.read
+[10:21:17 AM] after     shell.exec npm run lint
+[10:21:17 AM]   risk 0.15 (low): No risky patterns matched -> allowed
+[10:21:17 AM]   ran: shell.exec
+[10:21:17 AM] Done. Now ask the Investigator what happened.
+</pasted_content id="1322">
+
+---
+
+ok vay thi demo ta se can lam gi
+
+---
+
+commit push len de deploy len vercel di
+
+---
+
+AUTH0_* ??
+
+---
+
+<pasted_content id="1322">
+APP_BASE_URL
+Production
+Updated 
+11h ago
+
+
+APPROVER_EMAILS
+
+•••••••••••••••
+Production and Preview
+Added 
+10h ago
+
+
+AUTH0_AGENT_CLIENT_IDS
+
+•••••••••••••••
+Production and Preview
+Added 
+10h ago
+
+
+AUTH0_AUDIENCE
+
+•••••••••••••••
+Production and Preview
+Added 
+10h ago
+
+
+AUTH0_CLIENT_ID
+
+•••••••••••••••
+Production
+Added 
+11h ago
+
+
+AUTH0_CLIENT_SECRET
+Production
+Updated 
+11h ago
+
+
+AUTH0_DOMAIN
+
+•••••••••••••••
+Production
+Added 
+11h ago
+
+
+AUTH0_SECRET
+Production
+Updated 
+11h ago
+
+
+DATABASE_URL
+Production
+Updated 
+11h ago
+
+
+DEMO_INTERVAL_SECONDS
+
+•••••••••••••••
+Production and Preview
+Added 
+9h ago
+
+
+DEMO_MODE
+
+•••••••••••••••
+Production and Preview
+Added 
+9h ago
+
+
+GEMINI_API_KEY
+Production and Preview
+Updated 
+9h ago
+
+
+RISK_MODEL
+</pasted_content id="1322">
+
+---
+
+viet cho toi 1 file local demo : gom script, cac buoc show demo
+
+---
+
+vercel hoat dong roi
+
+---
+
+tutu sao language khi ban click policies cac thu la tieng viet thay vi tieng anh vay
+
+---
+
+ok now we are post our demo, answer what i ask
+
+---
+
+<pasted_content id="1322">
+General info
+* Project name
+You can change this at any time.
+
+TRIPWIRE
+52 characters left
+* Elevator pitch
+Provide a short tagline for the project. You can change this later.
+</pasted_content id="1322">
+
+---
+
+co them tu nhu disaster duoc k
+
+---
+
+Project Story
+* About the project
+Be sure to write what inspired you, what you learned, how you built your project, and the challenges you faced. Format your story in Markdown, with LaTeX support for math.
+
+---
+
+* Built with
+
+---
+
+no bao dua link demo nhung ma minh can xac minh chi co nick nay thoi thi lam nhu nao
+
+---
+
+cach 3 ok nhat roi
+
+---
+
+ok
+
+---
+
+local demo push len lm j
+
+---
+
+nhung giam khao co biet tieng viet dau
+
+---
+
+ok bay gio tét deploy kieu gi, toi thu tren vercel van can dang nhap de xem dashboard...
