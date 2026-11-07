@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { AgentEvent } from "@/lib/events";
+import { ensureDemoData } from "@/lib/demo";
 import { riskThreshold } from "@/lib/risk";
 
 export type MinuteBucket = { bucket: string; events: number; risky: number; denied: number; pending: number; max_risk: number | null };
@@ -20,6 +21,7 @@ const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
 /** Reads the continuous aggregates (real-time aggregation on) plus the latest raw events. */
 export async function getDashboardData(): Promise<DashboardData> {
+  await ensureDemoData();
   const [minutes, agents, actions, pending, feed] = await Promise.all([
     db.query(
       `SELECT bucket, sum(events)::int AS events, sum(risky)::int AS risky, sum(denied)::int AS denied,

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { isApprover } from "@/lib/approvers";
 import { listPending, listRecentDecisions, type AgentEvent } from "@/lib/events";
+import { ensureDemoData } from "@/lib/demo";
 import { hasFreshStepUp } from "@/lib/step-up";
 import { PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
 import { approveAction, denyAction } from "./actions";
@@ -37,6 +38,7 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
   const notice = NOTICES[one(params.notice) ?? ""];
   const confirmId = one(params.confirm);
 
+  await ensureDemoData();
   const approver = isApprover(session.user);
   const stepUpReady = await hasFreshStepUp(session);
   const [pending, decided] = await Promise.all([listPending(), listRecentDecisions()]);

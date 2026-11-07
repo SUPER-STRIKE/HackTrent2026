@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
+import { ensureDemoData } from "@/lib/demo";
 import { listIncidents } from "@/lib/incidents";
 import { NotApprover, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
 
@@ -23,6 +24,7 @@ async function List() {
   const session = await auth0.getSession();
   if (!session) redirect("/auth/login?returnTo=/incidents");
   if (!isApprover(session.user)) return <NotApprover text={NOT_APPROVER_TEXT} />;
+  await ensureDemoData();
   const incidents = await listIncidents();
   return (
     <section className="panel">

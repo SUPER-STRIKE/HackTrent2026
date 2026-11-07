@@ -2,61 +2,22 @@
 //   npm run db:seed         seed once
 //   npm run demo            seed, then keep adding one event every INTERVAL seconds (default 5). Ctrl+C to stop.
 // Idempotent: replaces previous seed rows (session_id starting with "seed-"). Never touches real events.
+// (The deployed app can also do this by itself: set DEMO_MODE=1, see .env.example.)
 import pg from "pg";
 import { pgConfig } from "../db/connection.mjs";
+import { historyRows, insertAgents, insertRow, liveRow } from "../db/demo-data.mjs";
 
 try { process.loadEnvFile(".env.local"); } catch {}
 const url = process.env.DATABASE_URL;
 if (!url) { console.error("DATABASE_URL is not set (.env.local)"); process.exit(1); }
-
-const AGENTS = [
-  ["seed-deploy-bot", "deploy-bot"],
-  ["seed-support-bot", "support-bot"],
-  ["seed-data-bot", "data-bot"],
-];
-
-// [agent, action_type, target, payload, score, reason, status, decided_by]
-const SAFE = [
-  ["fs.read", "README.md", {}], ["shell.exec", "npm test", {}], ["db.query", "SELECT count(*) FROM orders", {}],
-  ["http.get", "https://api.internal/health", {}], ["fs.write", "src/feature.ts", { bytes: 1840 }], ["git.commit", "feat: add retry logic", {}],
-];
-const INCIDENTS = [
-  [0, "db.execute", "production", { sql: "DROP TABLE customers" }, 0.97, "Destructive database statement", "denied", "seed-approver"],
-  [0, "shell.exec", "rm -rf /var/lib/app", {}, 0.95, "Destructive filesystem command", "denied", "seed-approver"],
-  [1, "send_email", "all-customers@example.com", { subject: "Refund notice", recipients: 12000 }, 0.82, "Mass messaging to customers", "approved", "seed-approver"],
-  [2, "fs.read", ".env.production", {}, 0.78, "Accesses secrets or credentials", "denied", "seed-approver"],
-  [1, "refund", "order-8841", { amount: 4200 }, 0.8, "Moves money", "approved", "seed-approver"],
-  [2, "db.execute", "production", { sql: "DELETE FROM sessions" }, 0.9, "DELETE without WHERE clause", "pending", null],
-];
-
-const level = (s) => (s >= 0.9 ? "critical" : s >= 0.7 ? "high" : s >= 0.3 ? "medium" : "low");
-const minsAgo = (m) => new Date(Date.now() - m * 60_000);
 
 const client = new pg.Client(pgConfig(url));
 await client.connect();
 try {
   await client.query("BEGIN");
   await client.query("DELETE FROM agent_events WHERE session_id LIKE 'seed-%'");
-  for (const [id, name] of AGENTS)
-    await client.query("INSERT INTO agents (id, name, auth0_client_id) VALUES ($1,$2,$1) ON CONFLICT (id) DO NOTHING", [id, name]);
-
-  const insert = (time, agent, type, target, payload, score, reason, status, by) =>
-    client.query(
-      `INSERT INTO agent_events (time, agent_id, session_id, action_type, target, payload, risk_score, risk_level, risk_reason, status, decided_by, decided_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [time, AGENTS[agent][0], `seed-${AGENTS[agent][1]}`, type, target, JSON.stringify(payload), score, level(score), reason, status, by, by ? new Date(time.getTime() + 60_000) : null],
-    );
-
-  // Deterministic background traffic: one safe action per agent every 3 minutes over the last 55 minutes.
-  let i = 0;
-  for (let m = 55; m >= 2; m -= 3)
-    for (let a = 0; a < AGENTS.length; a++) {
-      const [type, target, payload] = SAFE[(i++ + a) % SAFE.length];
-      await insert(minsAgo(m), a, type, target, payload, 0.05 + ((i * 7) % 20) / 100, "No risky patterns matched", "allowed", null);
-    }
-  let n = 0;
-  for (const [a, type, target, payload, score, reason, status, by] of INCIDENTS)
-    await insert(minsAgo(50 - n++ * 8), a, type, target, payload, score, reason, status, by);
+  await insertAgents(client);
+  for (const r of historyRows()) await insertRow(client, r);
   await client.query("COMMIT");
 } catch (e) {
   await client.query("ROLLBACK");
@@ -73,35 +34,16 @@ if (!process.argv.includes("--live")) {
   process.exit(0);
 }
 
-// Live mode: one new event per tick so the dashboard keeps moving. Rows use session "seed-live",
-// so the next seed run replaces them. Direct inserts need no agent credentials.
-const intervalMs = Math.max(1, Number(process.env.INTERVAL) || 5) * 1000;
-const rnd = (n) => Math.floor(Math.random() * n);
-let tick = 0;
+const intervalMs = Math.max(1, Number(process.env.INTERVAL || process.env.DEMO_INTERVAL_SECONDS) || 5) * 1000;
+let seq = 0;
 let stopping = false;
 process.on("SIGINT", () => { stopping = true; });
-
 console.log(`Live: adding an event every ${intervalMs / 1000}s. Ctrl+C to stop.`);
 while (!stopping) {
-  const a = rnd(AGENTS.length);
-  const risky = ++tick % 7 === 0;
-  let row;
-  if (risky) {
-    const [, type, target, payload, score, reason] = INCIDENTS[rnd(INCIDENTS.length)];
-    const { rows } = await client.query("SELECT count(*)::int AS n FROM agent_events WHERE session_id = 'seed-live' AND status = 'pending'");
-    const pending = rows[0].n < 3;
-    row = [new Date(), a, type, target, payload, score, reason, pending ? "pending" : "denied", pending ? null : "demo-policy"];
-  } else {
-    const [type, target, payload] = SAFE[rnd(SAFE.length)];
-    row = [new Date(), a, type, target, payload, 0.03 + rnd(25) / 100, "No risky patterns matched", "allowed", null];
-  }
-  const [time, agent, type, target, payload, score, reason, status, by] = row;
-  await client.query(
-    `INSERT INTO agent_events (time, agent_id, session_id, action_type, target, payload, risk_score, risk_level, risk_reason, status, decided_by, decided_at)
-     VALUES ($1,$2,'seed-live',$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [time, AGENTS[agent][0], type, target, JSON.stringify(payload), score, level(score), reason, status, by, by ? time : null],
-  );
-  console.log(`[${time.toLocaleTimeString()}] ${AGENTS[agent][1]} ${type} ${target} -> ${status}`);
-  await new Promise((r) => setTimeout(r, intervalMs));
+  const { rows } = await client.query("SELECT count(*)::int AS n FROM agent_events WHERE session_id = 'seed-live' AND status = 'pending'");
+  const r = liveRow(++seq, new Date(), rows[0].n);
+  await insertRow(client, r);
+  console.log(`[${r.time.toLocaleTimeString()}] ${r.type} ${r.target} -> ${r.status}`);
+  await new Promise((res) => setTimeout(res, intervalMs));
 }
 await client.end();
