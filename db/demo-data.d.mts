@@ -15,6 +15,6 @@ type Queryable = { query: (text: string, params?: unknown[]) => Promise<{ rows: 
 
 export const AGENTS: [string, string][];
 export function historyRows(now?: number): DemoRow[];
-export function liveRow(seq: number, time: Date, pendingNow: number): DemoRow;
+export function liveRow(seq: number, time: Date): DemoRow;
 export function insertAgents(client: Queryable): Promise<void>;
 export function insertRow(client: Queryable, row: DemoRow): Promise<void>;

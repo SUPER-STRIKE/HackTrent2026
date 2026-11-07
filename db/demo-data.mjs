@@ -49,10 +49,13 @@ export function historyRows(now = Date.now()) {
 // Live stream: the same cases in a fixed order, mostly low risk with a risky case every few events.
 const LIVE_ORDER = [1, 2, 3, 1, 4, 2, 5, 3, 1, 2, 6, 4, 3, 1, 7, 2, 3, 4, 8, 1, 2, 3, 9, 4, 1, 2, 3, 10];
 
-/** The seq-th live event. Case 10 stays pending while fewer than 3 live rows are pending, then is shown as denied. */
-export function liveRow(seq, time, pendingNow) {
+/**
+ * The seq-th live event. Every risky case (score at or above the 0.7 tripwire) is held as pending
+ * and waits for a human in /approvals; nothing is auto-denied.
+ */
+export function liveRow(seq, time) {
   const r = fromCase(LIVE_ORDER[seq % LIVE_ORDER.length], time, "seed-live");
-  if (r.status === "pending" && pendingNow >= 3) return { ...r, status: "denied", by: "demo-policy" };
+  if (r.score >= 0.7) return { ...r, status: "pending", by: null };
   return r;
 }
 

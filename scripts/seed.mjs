@@ -40,8 +40,7 @@ let stopping = false;
 process.on("SIGINT", () => { stopping = true; });
 console.log(`Live: adding an event every ${intervalMs / 1000}s. Ctrl+C to stop.`);
 while (!stopping) {
-  const { rows } = await client.query("SELECT count(*)::int AS n FROM agent_events WHERE session_id = 'seed-live' AND status = 'pending'");
-  const r = liveRow(++seq, new Date(), rows[0].n);
+  const r = liveRow(++seq, new Date());
   await insertRow(client, r);
   console.log(`[${r.time.toLocaleTimeString()}] ${r.type} ${r.target} -> ${r.status}`);
   await new Promise((res) => setTimeout(res, intervalMs));

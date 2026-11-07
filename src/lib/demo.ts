@@ -43,13 +43,9 @@ export async function ensureDemoData(): Promise<void> {
       const last = rows[0].last ? new Date(rows[0].last).getTime() : 0;
       const due = Math.min(MAX_CATCH_UP, Math.floor((now - last) / intervalMs));
       if (due > 0) {
-        const pending = await client.query("SELECT count(*)::int AS n FROM agent_events WHERE session_id = 'seed-live' AND status = 'pending'");
-        let pendingNow: number = pending.rows[0].n;
         for (let k = due - 1; k >= 0; k--) {
           const time = new Date(now - k * intervalMs);
-          const r = liveRow(Math.floor(time.getTime() / intervalMs), time, pendingNow);
-          if (r.status === "pending") pendingNow++;
-          await insertRow(client, r);
+          await insertRow(client, liveRow(Math.floor(time.getTime() / intervalMs), time));
         }
       }
     }
