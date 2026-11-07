@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import pg from "pg";
+import { pgConfig } from "../db/connection.mjs";
 
 try { process.loadEnvFile(".env.local"); } catch {}
 
@@ -12,7 +13,7 @@ const statements = sql
   .map((s) => s.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").trim())
   .filter(Boolean);
 
-const client = new pg.Client({ connectionString: url.replace(/[?&]sslmode=[^&]*/, ""), ssl: { rejectUnauthorized: false } });
+const client = new pg.Client(pgConfig(url));
 await client.connect();
 for (const stmt of statements) {
   console.log("> " + stmt.split("\n")[0]);
