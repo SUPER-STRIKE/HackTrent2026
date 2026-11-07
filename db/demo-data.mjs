@@ -24,10 +24,20 @@ export const CASES = {
   10: { agent: 2, type: "db.execute", target: "production", payload: { sql: "DROP TABLE customers" }, score: 0.97, reason: "Destructive database statement on production", status: "pending", by: null },
 };
 
-/** A row is { time, agent, session, type, target, payload, score, reason, status, by }. */
+// Why each risky case got its score, shown as "Why this score". Low-risk cases fall back to a single model factor.
+const FACTORS = {
+  5: [{ kind: "rule", label: "Force push rewrites shared history", score: 0.85 }, { kind: "model", label: "Force push to the main branch", score: 0.8 }],
+  6: [{ kind: "rule", label: "Moves money", score: 0.8 }, { kind: "model", label: "Large refund, well above this agent's usual amounts", score: 0.72 }],
+  7: [{ kind: "model", label: "Reads a production secrets file", score: 0.68 }, { kind: "baseline", label: "Activity spike: 31 actions in the last hour, usually about 4", delta: 0.1 }],
+  8: [{ kind: "rule", label: "Sends content outside the system", score: 0.5 }, { kind: "model", label: "Text tries to override review and claims pre-approval (prompt injection)", score: 0.93 }],
+  9: [{ kind: "rule", label: "Pipes remote script into a shell", score: 0.9 }, { kind: "model", label: "Runs unreviewed remote code", score: 0.92 }],
+  10: [{ kind: "rule", label: "Destructive database statement", score: 0.95 }, { kind: "model", label: "Drops a customer table on production", score: 0.97 }],
+};
+
+/** A row is { time, agent, session, type, target, payload, score, reason, status, by, factors? }. */
 function fromCase(n, time, session) {
   const c = CASES[n];
-  return { time, agent: c.agent, session: session ?? `seed-${AGENTS[c.agent][1]}`, type: c.type, target: c.target, payload: c.payload, score: c.score, reason: c.reason, status: c.status, by: c.by };
+  return { time, agent: c.agent, session: session ?? `seed-${AGENTS[c.agent][1]}`, type: c.type, target: c.target, payload: c.payload, score: c.score, reason: c.reason, status: c.status, by: c.by, factors: FACTORS[n] };
 }
 
 /** An hour of history: steady low-risk traffic, then the risky cases in order. Case 10 is the newest and waits for approval. */
@@ -39,7 +49,7 @@ export function historyRows(now = Date.now()) {
     for (let a = 0; a < AGENTS.length; a++) {
       const n = [1, 2, 3, 4][(i++ + a) % 4];
       const base = fromCase(n, at(m));
-      rows.push({ ...base, agent: a, session: `seed-${AGENTS[a][1]}`, score: 0.04 + ((i * 7) % 18) / 100 });
+      rows.push({ ...base, agent: a, session: `seed-${AGENTS[a][1]}`, score: 0.04 + ((i * 7) % 18) / 100, factors: undefined });
     }
   const timeline = { 5: 48, 6: 41, 7: 34, 8: 27, 9: 20, 10: 4 };
   for (const [n, m] of Object.entries(timeline)) rows.push(fromCase(Number(n), at(m)));
@@ -66,8 +76,8 @@ export async function insertAgents(client) {
 
 export async function insertRow(client, r) {
   await client.query(
-    `INSERT INTO agent_events (time, agent_id, session_id, action_type, target, payload, risk_score, risk_level, risk_reason, status, decided_by, decided_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-    [r.time, AGENTS[r.agent][0], r.session, r.type, r.target, JSON.stringify(r.payload), r.score, level(r.score), r.reason, r.status, r.by, r.by ? new Date(r.time.getTime() + 60_000) : null],
+    `INSERT INTO agent_events (time, agent_id, session_id, action_type, target, payload, risk_score, risk_level, risk_reason, risk_factors, status, decided_by, decided_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [r.time, AGENTS[r.agent][0], r.session, r.type, r.target, JSON.stringify(r.payload), r.score, level(r.score), r.reason, JSON.stringify(r.factors ?? [{ kind: "model", label: r.reason, score: r.score }]), r.status, r.by, r.by ? new Date(r.time.getTime() + 60_000) : null],
   );
 }

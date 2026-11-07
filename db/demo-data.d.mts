@@ -9,6 +9,7 @@ export type DemoRow = {
   reason: string;
   status: "allowed" | "pending" | "approved" | "denied";
   by: string | null;
+  factors?: { kind: string; label: string; score?: number; delta?: number }[];
 };
 
 type Queryable = { query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
