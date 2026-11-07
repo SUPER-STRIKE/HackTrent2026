@@ -24,10 +24,12 @@ before(async () => {
         const b = JSON.parse(body);
         reports.push(b);
         if (b.action_type.endsWith("deny.me")) return send(201, { event_id: "e-deny", status: "denied", risk: { reason: "Blocked by policy" } });
+        if (b.action_type === "slow") return send(201, { event_id: "e-slow", status: "pending", risk: {} });
         if (b.action_type === "risky" || b.action_type === "mcp.risky") return send(201, { event_id: "e-risky", status: "pending", risk: { reason: "r" } });
         if (b.action_type === "bad") return send(400, { error: "nope" });
         return send(201, { event_id: "e-ok", status: "allowed", risk: {} });
       }
+      if (req.url.startsWith("/api/actions/e-slow")) return setTimeout(() => send(200, { status: "approved", proceed: true }), 400);
       if (req.url.startsWith("/api/actions/e-risky")) return setTimeout(() => send(200, { status: "approved", proceed: true }), 150);
       send(404, {});
     });
@@ -53,6 +55,11 @@ test("allowed action runs, risky waits for approval, denied never runs", async (
   let ran = false;
   await assert.rejects(() => tw.guard(act("deny.me"), () => (ran = true)), TripwireDenied);
   assert.equal(ran, false);
+});
+
+test("waiting for a human outlasts the per-request timeout (long poll)", async () => {
+  const tw = make({ timeoutMs: 150 }); // the server holds the status request for 400ms
+  assert.equal(await tw.guard(act("slow"), () => "ran after approval"), "ran after approval");
 });
 
 test("retries transient 503 then succeeds", async () => {

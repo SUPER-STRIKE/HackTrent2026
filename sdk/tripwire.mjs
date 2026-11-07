@@ -98,9 +98,9 @@ export class Tripwire {
   }
 
   /** One HTTP attempt with a timeout. Network failures and timeouts become TripwireUnavailable. */
-  async #request(url, init, { recordsAction = false } = {}) {
+  async #request(url, init, { recordsAction = false, timeoutMs = this.timeoutMs } = {}) {
     try {
-      return await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(this.timeoutMs) });
+      return await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
     } catch (err) {
       // Only a request that records an action can leave one behind, and only if it may have been delivered.
       throw new TripwireUnavailable(`Tripwire: could not reach ${new URL(url).host}`, err, recordsAction && !neverReached(err));
@@ -136,12 +136,12 @@ export class Tripwire {
     return this.token;
   }
 
-  async #call(path, init = {}) {
+  async #call(path, init = {}, { timeoutMs } = {}) {
     return this.#withRetry(async () => {
       const res = await this.#request(`${this.baseUrl}${path}`, {
         ...init,
         headers: { ...init.headers, authorization: `Bearer ${await this.#accessToken()}`, "content-type": "application/json" },
-      }, { recordsAction: init.method === "POST" });
+      }, { recordsAction: init.method === "POST", timeoutMs });
       const body = await res.json().catch(() => ({}));
       if (res.status === 401) this.token = null; // the token may have been revoked; fetch a new one next time
       if (isTransient(res.status)) {
@@ -170,7 +170,9 @@ export class Tripwire {
     for (;;) {
       const left = deadline - Date.now();
       if (left <= 0) return { status: "timeout", proceed: false };
-      const d = await this.#call(`/api/actions/${eventId}?wait=${Math.min(25, Math.ceil(left / 1000))}`);
+      const wait = Math.min(25, Math.ceil(left / 1000));
+      // The server holds this request open for up to `wait` seconds, so the timeout must outlast it.
+      const d = await this.#call(`/api/actions/${eventId}?wait=${wait}`, {}, { timeoutMs: wait * 1000 + this.timeoutMs });
       if (d.status !== "pending") return d;
       onWait?.(d);
     }
