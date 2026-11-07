@@ -1,0 +1,64 @@
+chay kieu gi ?
+
+---
+
+la tao 1 application moi a
+
+---
+
+dang khong hieu lam vay la trong env.local co nhung var nao roi
+
+---
+
+hinh nhu no chay roi
+
+---
+
+ok vay khi demo can cho nguoi judege xem nhung gi
+
+---
+
+simulate lam gi vay
+
+---
+
+<pasted_content id="1322">
+E:\hacktrent2026\hacktren2026> npm run simulate
+
+> tw_tmp@0.1.0 simulate
+> node --env-file=.env.local scripts/simulate.mjs
+
+[9:50:22 AM] Tripwire demo, session demo-202611071450
+[9:50:24 AM] normal    fs.read README.md
+[9:50:25 AM]   risk 0.20 (low): This action is a read-only operation on a non-sensitive file, posing minimal risk. -> allowed
+[9:50:25 AM]   ran: fs.read
+[9:50:28 AM] normal    shell.exec npm test
+[9:50:29 AM]   risk 0.80 (high): Risk scoring unavailable, held for review. No risky patterns matched -> pending
+file:///E:/hacktrent2026/hacktren2026/sdk/tripwire.mjs:106
+      throw new TripwireUnavailable(`Tripwire: could not reach ${new URL(url).host}`, err, recordsAction && !neverReached(err));
+            ^
+
+TripwireUnavailable: Tripwire: could not reach localhost:3000
+    at #request (file:///E:/hacktrent2026/hacktren2026/sdk/tripwire.mjs:106:13)     
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)  
+    at async file:///E:/hacktrent2026/hacktren2026/sdk/tripwire.mjs:141:19
+    ... 4 lines matching cause stack trace ...
+    at async file:///E:/hacktrent2026/hacktren2026/scripts/simulate.mjs:57:25 {     
+  ambiguous: false,
+  [cause]: DOMException [TimeoutError]: The operation was aborted due to timeout    
+      at node:internal/deps/undici/undici:15845:13
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at async #request (file:///E:/hacktrent2026/hacktren2026/sdk/tripwire.mjs:103:14)
+      at async file:///E:/hacktrent2026/hacktren2026/sdk/tripwire.mjs:141:19        
+      at async #withRetry (file:///E:/hacktrent2026/hacktren2026/sdk/tripwire.mjs:114:16)
+      at async Tripwire.waitForDecision (file:///E:/hacktrent2026/hacktren2026/sdk/tripwire.mjs:173:17)
+      at async Tripwire.guard (file:///E:/hacktrent2026/hacktren2026/sdk/tripwire.mjs:208:17)
+      at async run (file:///E:/hacktrent2026/hacktren2026/scripts/simulate.mjs:42:5)
+      at async file:///E:/hacktrent2026/hacktren2026/scripts/simulate.mjs:57:25     
+}
+
+Node.js v24.11.0
+</pasted_content id="1322">
+
+ 
+sao vay, do toi tat demo mode a
