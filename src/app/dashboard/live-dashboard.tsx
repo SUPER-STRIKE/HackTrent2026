@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { DashboardData, MinuteBucket } from "@/lib/dashboard";
 import { RiskBadge, StatusTag, railClass } from "@/components/ui";
 
-const POLL_MS = 3000;
+const POLL_MS = 2000;
 const SLOTS = 60;
 
 export function LiveDashboard({ initial }: { initial: DashboardData }) {
