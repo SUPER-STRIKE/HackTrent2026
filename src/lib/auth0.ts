@@ -12,8 +12,6 @@ export const auth0 = new Auth0Client({
         ...filterDefaultIdTokenClaims(session.user),
         amr: Array.isArray(claims.amr) ? claims.amr : [],
         auth_time: typeof claims.auth_time === "number" ? claims.auth_time : undefined,
-        // Survives token refreshes so one MFA login cannot approve twice.
-        mfa_used_at: session.user.mfa_used_at,
       },
     };
   },

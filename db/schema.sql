@@ -35,6 +35,14 @@ CREATE INDEX IF NOT EXISTS agent_events_agent_time_idx ON agent_events (agent_id
 CREATE INDEX IF NOT EXISTS agent_events_session_time_idx ON agent_events (session_id, time DESC);
 CREATE INDEX IF NOT EXISTS agent_events_pending_idx ON agent_events (time DESC) WHERE status = 'pending';
 
+-- One row per MFA login that has been spent on an approval (enforced server-side, not in the cookie).
+CREATE TABLE IF NOT EXISTS spent_step_ups (
+  user_sub   text        NOT NULL,
+  auth_time  bigint      NOT NULL,
+  spent_at   timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_sub, auth_time)
+);
+
 -- Per-minute rollup for the live dashboard (real-time aggregation on).
 CREATE MATERIALIZED VIEW IF NOT EXISTS events_per_minute
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS

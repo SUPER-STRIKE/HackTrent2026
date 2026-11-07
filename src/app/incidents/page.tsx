@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
+import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
 import { listIncidents } from "@/lib/incidents";
 
 export const instant = false;
@@ -37,6 +38,7 @@ export default function IncidentsPage() {
 async function List() {
   const session = await auth0.getSession();
   if (!session) redirect("/auth/login?returnTo=/incidents");
+  if (!isApprover(session.user)) return <p className="rounded bg-amber-50 px-4 py-3 text-sm text-amber-900">{NOT_APPROVER_TEXT}</p>;
   const incidents = await listIncidents();
   if (incidents.length === 0) {
     return <p className="rounded border border-dashed px-4 py-6 text-center text-gray-500">No incidents yet.</p>;

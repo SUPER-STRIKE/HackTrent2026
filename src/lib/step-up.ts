@@ -1,31 +1,40 @@
 import type { SessionData } from "@auth0/nextjs-auth0/types";
+import { db } from "@/lib/db";
 
 /** How long after an MFA login an approval is still accepted. */
 export const STEP_UP_MAX_AGE_SECONDS = 5 * 60;
 
 const MFA_ACR = "http://schemas.openid.net/pape/policies/2007/06/multi-factor";
 
-/**
- * True when the session comes from a login that finished MFA within the last
- * STEP_UP_MAX_AGE_SECONDS and has not yet been spent on an approval.
- * Each approval spends it (see markStepUpUsed), so every approval needs its own MFA.
- */
-export function hasFreshStepUp(session: SessionData, now = Date.now() / 1000): boolean {
-  const { amr, auth_time, mfa_used_at } = session.user as {
-    amr?: unknown;
-    auth_time?: unknown;
-    mfa_used_at?: unknown;
-  };
-  if (!Array.isArray(amr) || !amr.includes("mfa")) return false;
-  if (typeof auth_time !== "number" || now - auth_time > STEP_UP_MAX_AGE_SECONDS) return false;
-  if (typeof mfa_used_at === "number" && mfa_used_at >= auth_time) return false;
-  return true;
+type StepUpClaims = { amr?: unknown; auth_time?: unknown };
+
+function mfaAuthTime(session: SessionData, now: number): number | null {
+  const { amr, auth_time } = session.user as StepUpClaims;
+  if (!Array.isArray(amr) || !amr.includes("mfa")) return null;
+  if (typeof auth_time !== "number" || now - auth_time > STEP_UP_MAX_AGE_SECONDS) return null;
+  return auth_time;
 }
 
-/** Marks the current MFA login as spent. Returns the updated session to save. */
-export function markStepUpUsed(session: SessionData): SessionData {
-  const authTime = (session.user as { auth_time?: number }).auth_time;
-  return { ...session, user: { ...session.user, mfa_used_at: authTime } };
+/** True when the session comes from a login that finished MFA within the last STEP_UP_MAX_AGE_SECONDS and has not been spent. */
+export async function hasFreshStepUp(session: SessionData, now = Date.now() / 1000): Promise<boolean> {
+  const authTime = mfaAuthTime(session, now);
+  if (authTime === null) return false;
+  const { rowCount } = await db.query("SELECT 1 FROM spent_step_ups WHERE user_sub = $1 AND auth_time = $2", [session.user.sub, authTime]);
+  return rowCount === 0;
+}
+
+/**
+ * Atomically spends this MFA login. Returns false if it is not fresh or was already spent,
+ * so concurrent or replayed requests (even with an old cookie) cannot reuse it.
+ */
+export async function spendStepUp(session: SessionData, now = Date.now() / 1000): Promise<boolean> {
+  const authTime = mfaAuthTime(session, now);
+  if (authTime === null) return false;
+  const { rowCount } = await db.query(
+    "INSERT INTO spent_step_ups (user_sub, auth_time) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    [session.user.sub, authTime],
+  );
+  return rowCount === 1;
 }
 
 /**

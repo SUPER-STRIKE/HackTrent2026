@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
+import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
 import { Chat } from "./chat";
 
 export const instant = false;
@@ -30,5 +31,6 @@ export default function InvestigatorPage() {
 async function Gate() {
   const session = await auth0.getSession();
   if (!session) redirect("/auth/login?returnTo=/investigator");
+  if (!isApprover(session.user)) return <p className="rounded bg-amber-50 px-4 py-3 text-sm text-amber-900">{NOT_APPROVER_TEXT}</p>;
   return <Chat />;
 }

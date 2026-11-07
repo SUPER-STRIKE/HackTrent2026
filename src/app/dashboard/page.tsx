@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
+import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
 import { getDashboardData } from "@/lib/dashboard";
 import { LiveDashboard } from "./live-dashboard";
 
@@ -32,5 +33,6 @@ export default function DashboardPage() {
 async function Content() {
   const session = await auth0.getSession();
   if (!session) redirect("/auth/login?returnTo=/dashboard");
+  if (!isApprover(session.user)) return <p className="rounded bg-amber-50 px-4 py-3 text-sm text-amber-900">{NOT_APPROVER_TEXT}</p>;
   return <LiveDashboard initial={await getDashboardData()} />;
 }

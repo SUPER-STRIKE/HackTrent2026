@@ -17,3 +17,6 @@ export function isApprover(user: User): boolean {
 export function approverName(user: User): string {
   return (typeof user.email === "string" && user.email) || user.sub;
 }
+
+export const NOT_APPROVER_TEXT =
+  "Your account is not on the approver list (APPROVER_EMAILS), or its email is not verified, so you cannot view this.";

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
+import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
 import { geminiConfigured } from "@/lib/gemini";
 import { findSimilar, getEvent, getSessionContext, summarizeIncident } from "@/lib/incidents";
 
@@ -28,6 +29,7 @@ async function Detail({ params }: { params: PageProps<"/incidents/[id]">["params
   const { id } = await params;
   const session = await auth0.getSession();
   if (!session) redirect(`/auth/login?returnTo=/incidents/${encodeURIComponent(id)}`);
+  if (!isApprover(session.user)) return <p className="rounded bg-amber-50 px-4 py-3 text-sm text-amber-900">{NOT_APPROVER_TEXT}</p>;
 
   const event = await getEvent(id);
   if (!event) notFound();

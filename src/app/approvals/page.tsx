@@ -51,7 +51,7 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
   const confirmId = one(params.confirm);
 
   const approver = isApprover(session.user);
-  const stepUpReady = hasFreshStepUp(session);
+  const stepUpReady = await hasFreshStepUp(session);
   const [pending, decided] = await Promise.all([listPending(), listRecentDecisions()]);
 
   return (

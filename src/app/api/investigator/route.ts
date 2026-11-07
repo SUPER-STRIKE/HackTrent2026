@@ -1,4 +1,5 @@
 import { auth0 } from "@/lib/auth0";
+import { isApprover } from "@/lib/approvers";
 import { geminiConfigured } from "@/lib/gemini";
 import { askInvestigator } from "@/lib/incidents";
 
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
   try {
     const session = await auth0.getSession();
     if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
+    if (!isApprover(session.user)) return Response.json({ error: "forbidden" }, { status: 403 });
     if (!geminiConfigured()) return Response.json({ error: "GEMINI_API_KEY is not set" }, { status: 503 });
 
     const body = (await request.json().catch(() => null)) as { question?: unknown; history?: unknown } | null;

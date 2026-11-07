@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { decideEvent, isUuid } from "@/lib/events";
-import { hasFreshStepUp, markStepUpUsed, stepUpLoginUrl } from "@/lib/step-up";
+import { spendStepUp, stepUpLoginUrl } from "@/lib/step-up";
 import { approverName, isApprover } from "@/lib/approvers";
 
 async function requireApprover() {
@@ -19,10 +19,8 @@ export async function approveAction(formData: FormData) {
   if (!isUuid(id)) redirect("/approvals?notice=invalid");
   const session = await requireApprover();
 
-  if (!hasFreshStepUp(session)) redirect(stepUpLoginUrl(`/approvals?confirm=${id}`));
-
-  // Spend the MFA before writing, so a replayed form cannot reuse it.
-  await auth0.updateSession(markStepUpUsed(session));
+  // Spend the MFA in the database before writing, so a replayed form or old cookie cannot reuse it.
+  if (!(await spendStepUp(session))) redirect(stepUpLoginUrl(`/approvals?confirm=${id}`));
   const ok = await decideEvent(id, "approved", approverName(session.user));
   redirect(ok ? "/approvals?notice=approved" : "/approvals?notice=already-decided");
 }
