@@ -14,7 +14,8 @@ const MAX_CATCH_UP = 12; // after a long gap, do not dump more than this many ev
 
 export function demoIntervalSeconds(): number {
   const n = Number(process.env.DEMO_INTERVAL_SECONDS);
-  return Number.isFinite(n) && n >= 1 ? n : 5;
+  // Anything below 1s is clamped to 1s (it used to fall back to 5s, which looked like "no change").
+  return Number.isFinite(n) && n > 0 ? Math.max(1, n) : 5;
 }
 
 export async function ensureDemoData(): Promise<void> {

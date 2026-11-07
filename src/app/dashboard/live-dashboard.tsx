@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import type { DashboardData, MinuteBucket } from "@/lib/dashboard";
 import { RiskBadge, StatusTag, railClass } from "@/components/ui";
 
-const POLL_MS = 2000;
 const SLOTS = 60;
 
 export function LiveDashboard({ initial }: { initial: DashboardData }) {
@@ -14,27 +13,31 @@ export function LiveDashboard({ initial }: { initial: DashboardData }) {
 
   useEffect(() => {
     let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let delay = initial.refresh_ms;
     const tick = async () => {
-      try {
-        const res = await fetch("/api/dashboard", { cache: "no-store" });
-        if (!res.ok) throw new Error(String(res.status));
-        const next = (await res.json()) as DashboardData;
-        if (!stopped) {
-          setData(next);
-          setError(false);
+      if (document.visibilityState === "visible") {
+        try {
+          const res = await fetch("/api/dashboard", { cache: "no-store" });
+          if (!res.ok) throw new Error(String(res.status));
+          const next = (await res.json()) as DashboardData;
+          if (!stopped) {
+            setData(next);
+            setError(false);
+            delay = next.refresh_ms;
+          }
+        } catch {
+          if (!stopped) setError(true);
         }
-      } catch {
-        if (!stopped) setError(true);
       }
+      if (!stopped) timer = setTimeout(tick, delay);
     };
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void tick();
-    }, POLL_MS);
+    timer = setTimeout(tick, delay);
     return () => {
       stopped = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
-  }, []);
+  }, [initial.refresh_ms]);
 
   const t = data.totals;
   return (
