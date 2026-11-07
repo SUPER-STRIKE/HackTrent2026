@@ -12,6 +12,9 @@ export default async function Home() {
       {session ? (
         <>
           <p>Logged in as {session.user.email}</p>
+          <a className="underline" href="/dashboard">
+            Live dashboard
+          </a>
           <a className="underline" href="/approvals">
             Approvals queue
           </a>
