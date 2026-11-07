@@ -46,7 +46,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     db.query(`SELECT count(*)::int AS n FROM agent_events WHERE status = 'pending'`),
     db.query<AgentEvent>(
       `SELECT e.id, e.time, e.agent_id, a.name AS agent_name, e.session_id, e.action_type, e.target,
-              e.payload, e.risk_score, e.risk_level, e.risk_reason, e.status, e.decided_by, e.decided_at
+              e.payload, e.risk_score, e.risk_level, e.risk_reason, e.risk_factors, e.status, e.decided_by, e.decided_at
        FROM agent_events e LEFT JOIN agents a ON a.id = e.agent_id
        ORDER BY e.time DESC LIMIT 25`,
     ),

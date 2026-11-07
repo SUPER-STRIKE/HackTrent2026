@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { RiskFactor } from "@/lib/scoring-core";
 
 export type EventStatus = "allowed" | "pending" | "approved" | "denied";
 
@@ -14,6 +15,7 @@ export type AgentEvent = {
   risk_score: number | null;
   risk_level: string | null;
   risk_reason: string | null;
+  risk_factors: RiskFactor[] | null;
   status: EventStatus;
   decided_by: string | null;
   decided_at: string | null;
@@ -24,7 +26,7 @@ export const isUuid = (s: unknown): s is string => typeof s === "string" && UUID
 
 const SELECT = `
   SELECT e.id, e.time, e.agent_id, a.name AS agent_name, e.session_id, e.action_type, e.target,
-         e.payload, e.risk_score, e.risk_level, e.risk_reason, e.status, e.decided_by, e.decided_at
+         e.payload, e.risk_score, e.risk_level, e.risk_reason, e.risk_factors, e.status, e.decided_by, e.decided_at
   FROM agent_events e LEFT JOIN agents a ON a.id = e.agent_id`;
 
 export async function listPending(limit = 50): Promise<AgentEvent[]> {

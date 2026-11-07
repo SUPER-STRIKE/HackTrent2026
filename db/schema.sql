@@ -80,3 +80,20 @@ SELECT add_continuous_aggregate_policy('events_per_minute',
 SELECT add_continuous_aggregate_policy('events_per_hour',
   start_offset => INTERVAL '3 days', end_offset => INTERVAL '1 minute',
   schedule_interval => INTERVAL '5 minutes', if_not_exists => TRUE);
+
+-- Why an action got its score: rules, model, policy, baseline and history factors.
+ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS risk_factors jsonb;
+
+-- Rules written by the team. deny blocks at once, require_approval always holds, allow lets low-risk matches through.
+CREATE TABLE IF NOT EXISTS policy_rules (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       text        NOT NULL,
+  pattern    text        NOT NULL,
+  match_on   text        NOT NULL DEFAULT 'any' CHECK (match_on IN ('any','action_type','target','payload')),
+  agent_id   text,
+  effect     text        NOT NULL CHECK (effect IN ('deny','require_approval','allow')),
+  reason     text,
+  enabled    boolean     NOT NULL DEFAULT true,
+  created_by text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);

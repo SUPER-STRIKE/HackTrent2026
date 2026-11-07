@@ -1,0 +1,22 @@
+{
+  "name": "@tripwire/sdk",
+  "version": "0.2.0",
+  "description": "Flight recorder and seatbelt for AI agents: report actions, hold risky ones for human approval.",
+  "type": "module",
+  "main": "./tripwire.mjs",
+  "types": "./tripwire.d.mts",
+  "exports": {
+    ".": { "types": "./tripwire.d.mts", "default": "./tripwire.mjs" },
+    "./tools": { "types": "./adapters/tools.d.mts", "default": "./adapters/tools.mjs" },
+    "./env": { "default": "./env.mjs" },
+    "./claude-code-hook": "./adapters/claude-code-hook.mjs",
+    "./mcp-proxy": "./adapters/mcp-proxy.mjs"
+  },
+  "bin": {
+    "tripwire-mcp-proxy": "./adapters/mcp-proxy.mjs",
+    "tripwire-claude-hook": "./adapters/claude-code-hook.mjs"
+  },
+  "files": ["*.mjs", "*.d.mts", "adapters", "python", "README.md"],
+  "engines": { "node": ">=18" },
+  "license": "MIT"
+}

@@ -1,6 +1,8 @@
 import { authenticateAgent } from "@/lib/agent-auth";
 import { db } from "@/lib/db";
+import { loadPolicies, loadStats } from "@/lib/policy";
 import { riskThreshold, scoreAction } from "@/lib/risk";
+import { combine, evaluatePolicies, type BaseScore } from "@/lib/scoring-core";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_PENDING_PER_AGENT = 50;
@@ -88,8 +90,25 @@ export async function POST(request: Request) {
     if (usage[0].recent >= rateLimit() || usage[0].pending >= MAX_PENDING_PER_AGENT)
       return Response.json({ error: "rate limit exceeded" }, { status: 429, headers: { "Retry-After": "30" } });
 
-    const risk = await scoreAction({ ...body, agent_id: agent.agentId });
-    const status = risk.score >= riskThreshold() ? "pending" : "allowed";
+    const action = { ...body, agent_id: agent.agentId };
+    const [policies, stats] = await Promise.all([
+      loadPolicies(agent.agentId),
+      loadStats(agent.agentId, body.action_type, body.target ?? null),
+    ]);
+    const policy = evaluatePolicies(policies, action);
+
+    // A deny policy needs no model call, which also saves Gemini quota.
+    const denied: BaseScore & { rulesScore: number } = {
+      score: 1,
+      reason: "Blocked by policy",
+      source: "rules",
+      factors: [],
+      rulesScore: 1,
+    };
+    const base = policy.deny ? denied : await scoreAction(action);
+    const risk = combine({ base, rulesScore: base.rulesScore, stats, policy, threshold: riskThreshold() });
+    const status = risk.decision === "deny" ? "denied" : risk.decision === "hold" ? "pending" : "allowed";
+    const decidedBy = risk.decision === "deny" ? `policy:${risk.policy?.name ?? "deny"}` : null;
 
     // One round trip: register the agent if new and record the event.
     const { rows } = await db.query<{ id: string; time: string; status: string }>(
@@ -98,8 +117,8 @@ export async function POST(request: Request) {
          ON CONFLICT (id) DO NOTHING
        )
        INSERT INTO agent_events
-         (agent_id, session_id, action_type, target, payload, risk_score, risk_level, risk_reason, status)
-       VALUES ($1, $3, $4, $5, $6, $7, $8, $9, $10)
+         (agent_id, session_id, action_type, target, payload, risk_score, risk_level, risk_reason, risk_factors, status, decided_by, decided_at)
+       VALUES ($1, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CASE WHEN $12::text IS NULL THEN NULL ELSE now() END)
        RETURNING id, time, status`,
       [
         agent.agentId,
@@ -111,7 +130,9 @@ export async function POST(request: Request) {
         risk.score,
         risk.level,
         risk.reason,
+        JSON.stringify(risk.factors),
         status,
+        decidedBy,
       ],
     );
 
@@ -120,7 +141,7 @@ export async function POST(request: Request) {
         event_id: rows[0].id,
         time: rows[0].time,
         status: rows[0].status,
-        risk: { score: risk.score, level: risk.level, reason: risk.reason, source: risk.source },
+        risk: { score: risk.score, level: risk.level, reason: risk.reason, source: risk.source, factors: risk.factors },
       },
       { status: 201 },
     );

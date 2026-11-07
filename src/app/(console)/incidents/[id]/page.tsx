@@ -5,7 +5,7 @@ import { auth0 } from "@/lib/auth0";
 import { isApprover, NOT_APPROVER_TEXT } from "@/lib/approvers";
 import { geminiConfigured } from "@/lib/gemini";
 import { findSimilar, getEvent, getSessionContext, summarizeIncident } from "@/lib/incidents";
-import { NotApprover, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
+import { WhyScore, NotApprover, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
 
 export const instant = false;
 
@@ -46,6 +46,7 @@ async function Detail({ params }: { params: PageProps<"/incidents/[id]">["params
             {event.target && <span className="tgt">{event.target}</span>}
           </div>
           {event.risk_reason && <p className="reason">{event.risk_reason}</p>}
+          <WhyScore factors={event.risk_factors} />
           <dl className="kv">
             <dt>Agent</dt><dd>{event.agent_name ?? event.agent_id}</dd>
             <dt>Session</dt><dd>{event.session_id}</dd>

@@ -17,3 +17,6 @@ AGENTS.md
 WORKFLOW.md
 .claude/
 .entire/
+
+__pycache__/
+*.pyc

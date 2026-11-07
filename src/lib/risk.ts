@@ -10,7 +10,10 @@
  * If GEMINI_API_KEY is not set, rules alone decide (local development).
  */
 
-export type RiskLevel = "low" | "medium" | "high" | "critical";
+import { levelFor, type BaseScore, type RiskFactor, type RiskLevel } from "@/lib/scoring-core";
+
+export { levelFor };
+export type { RiskLevel };
 export type RiskSource = "rules" | "gemini" | "fallback";
 
 export type ActionInput = {
@@ -27,6 +30,7 @@ export type RiskResult = {
   level: RiskLevel;
   reason: string;
   source: RiskSource;
+  factors: RiskFactor[];
 };
 
 const GEMINI_TIMEOUT_MS = 8000;
@@ -36,13 +40,6 @@ const MAX_PROMPT_PAYLOAD_CHARS = 8000;
 export function riskThreshold(): number {
   const t = Number(process.env.RISK_THRESHOLD);
   return Number.isFinite(t) && t > 0 && t <= 1 ? t : 0.7;
-}
-
-export function levelFor(score: number): RiskLevel {
-  if (score >= 0.9) return "critical";
-  if (score >= 0.7) return "high";
-  if (score >= 0.3) return "medium";
-  return "low";
 }
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
@@ -68,7 +65,8 @@ export function scoreByRules(action: ActionInput): RiskResult {
   let best: Rule | undefined;
   for (const rule of RULES) if (rule.pattern.test(haystack) && (!best || rule.score > best.score)) best = rule;
   const score = best?.score ?? 0.05;
-  return { score, level: levelFor(score), reason: best?.reason ?? "No risky patterns matched", source: "rules" };
+  const reason = best?.reason ?? "No risky patterns matched";
+  return { score, level: levelFor(score), reason, source: "rules", factors: [{ kind: "rule", label: reason, score }] };
 }
 
 const SYSTEM_PROMPT = `You are Tripwire, a security reviewer for actions taken by autonomous AI agents.
@@ -132,19 +130,28 @@ async function scoreWithGemini(action: ActionInput, apiKey: string): Promise<{ s
   return { score: clamp01(score), reason };
 }
 
-export async function scoreAction(action: ActionInput): Promise<RiskResult> {
+/** Rules plus Gemini. Baseline, history and policies are applied afterwards by combine() in scoring-core. */
+export async function scoreAction(action: ActionInput): Promise<BaseScore & { rulesScore: number }> {
   const rules = scoreByRules(action);
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return rules;
+  if (!apiKey) return { ...rules, rulesScore: rules.score };
 
   try {
     const g = await scoreWithGemini(action, apiKey);
+    const factors: RiskFactor[] = [...rules.factors, { kind: "model", label: g.reason, score: g.score }];
     // Rules set a floor that the model cannot talk down.
-    if (rules.score > g.score) return { ...rules, reason: `${rules.reason}. ${g.reason}` };
-    return { score: g.score, level: levelFor(g.score), reason: g.reason, source: "gemini" };
+    if (rules.score > g.score) return { score: rules.score, reason: `${rules.reason}. ${g.reason}`, source: "rules", factors, rulesScore: rules.score };
+    return { score: g.score, reason: g.reason, source: "gemini", factors, rulesScore: rules.score };
   } catch (err) {
     console.error("gemini scoring failed", err instanceof Error ? err.message : err);
     const score = Math.max(rules.score, riskThreshold());
-    return { score, level: levelFor(score), reason: `Risk scoring unavailable, held for review. ${rules.reason}`, source: "fallback" };
+    const reason = `Risk scoring unavailable, held for review. ${rules.reason}`;
+    return {
+      score,
+      reason,
+      source: "fallback",
+      factors: [...rules.factors, { kind: "model", label: "Gemini unavailable, held for review", score }],
+      rulesScore: rules.score,
+    };
   }
 }

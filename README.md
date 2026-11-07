@@ -54,10 +54,57 @@ See [`.env.example`](.env.example) for the full list. The main groups are:
 | `npm run simulate` | Run the agent simulator (needs an Auth0 M2M app in `.env.local`) |
 | `npm run traffic` | Send steady background traffic |
 | `npm run lint` | Run ESLint |
+| `npm test` | Unit tests for scoring and the SDK |
 
 ## Agent SDK
 
-`sdk/tripwire.mjs` is a small client that agents use to send actions to Tripwire before running them and to wait for approval when an action is held.
+Agents report every action to Tripwire before running it. Low-risk actions run at once, risky ones wait for a human with MFA, denied ones never run.
+
+```js
+import { Tripwire } from "./sdk/tripwire.mjs";
+const tw = new Tripwire({ baseUrl, auth0Domain, audience, clientId, clientSecret, agentName: "billing-bot", failMode: "closed" });
+await tw.guard({ sessionId, actionType: "refund", target: "order-42", payload: { amount: 90 } }, () => refund(42));
+```
+
+```python
+from tripwire import Tripwire, guard   # sdk/python, standard library only
+tw = Tripwire(base_url=..., auth0_domain=..., audience=..., client_id=..., client_secret=..., agent_name="billing-bot")
+
+@guard(tw, session_id="run-42", action_type="refund")
+def refund(order_id, amount): ...
+```
+
+**Safety modes** decide what happens if Tripwire cannot be reached (after retries with backoff):
+
+| `failMode` | Behavior |
+| --- | --- |
+| `closed` (default) | The action does not run. |
+| `allowlist` | Runs only if its action type is in `offlineAllow`; everything else is blocked. |
+| `open` | The action runs. Only for low-stakes agents. |
+
+An outage never lets through an action that is already waiting for a human, and bad credentials or a rejected request are never treated as an outage.
+
+**Framework adapters** (`sdk/adapters`)
+
+| Adapter | Use |
+| --- | --- |
+| `tools.mjs` | `wrapTools(tw, { sessionId }, tools)` guards tools that expose `execute` (Vercel AI SDK), `func` (LangChain JS) or `invoke`. |
+| `mcp-proxy.mjs` | `node sdk/adapters/mcp-proxy.mjs -- <any stdio MCP server command>` guards every `tools/call` with no code changes. |
+| `claude-code-hook.mjs` | A Claude Code `PreToolUse` hook. Add it under `hooks.PreToolUse` in `.claude/settings.json` with a long `timeout`. |
+
+The command-line adapters read `TRIPWIRE_URL`, `TRIPWIRE_AUTH0_DOMAIN`, `TRIPWIRE_AUDIENCE`, `TRIPWIRE_CLIENT_ID`, `TRIPWIRE_CLIENT_SECRET`, and optionally `TRIPWIRE_FAIL_MODE` and `TRIPWIRE_OFFLINE_ALLOW`.
+
+## How an action is scored
+
+1. **Policies** (your own rules, `/policies`): a `deny` rule blocks at once with no model call; `require_approval` always holds.
+2. **Built-in rules + Gemini**: the higher of the two. Rules are a floor the model cannot talk down.
+3. **Baseline**: with at least 20 events of history, a first-ever action type for the agent adds 0.15 and an activity spike adds 0.10.
+4. **Feedback**: past human decisions on the same action type and target. A denial adds 0.10; three or more approvals and no denial subtracts 0.15. Critical built-in rules and `require_approval` policies are never relaxed.
+5. An `allow` policy caps a non-critical score just under the threshold.
+
+Every action stores the factors behind its score, shown as "Why this score" on Approvals and on each incident. Policies that loosen protection (`allow`, or turning off/deleting `deny` and `require_approval`) need a fresh MFA check.
+
+Apply the schema change with `npm run db:migrate` (adds `policy_rules` and `agent_events.risk_factors`). `npm test` runs the unit tests.
 
 ## Demo
 

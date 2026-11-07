@@ -5,7 +5,7 @@ import { isApprover } from "@/lib/approvers";
 import { listPending, listRecentDecisions, type AgentEvent } from "@/lib/events";
 import { ensureDemoData } from "@/lib/demo";
 import { hasFreshStepUp } from "@/lib/step-up";
-import { PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
+import { WhyScore, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
 import { approveAction, denyAction } from "./actions";
 
 export const instant = false;
@@ -99,6 +99,7 @@ function PendingCard({ event: e, canDecide, confirming }: { event: AgentEvent; c
         {e.target && <span className="tgt">{e.target}</span>}
       </div>
       {e.risk_reason && <p className="reason">{e.risk_reason}</p>}
+      <WhyScore factors={e.risk_factors} />
       <dl className="kv">
         <dt>Agent</dt><dd>{e.agent_name ?? e.agent_id}</dd>
         <dt>Session</dt><dd>{e.session_id}</dd>

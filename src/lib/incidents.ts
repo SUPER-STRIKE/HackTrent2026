@@ -7,7 +7,7 @@ const INCIDENT_WHERE = `(e.risk_level IN ('high','critical') OR e.status IN ('pe
 
 const SELECT = `
   SELECT e.id, e.time, e.agent_id, a.name AS agent_name, e.session_id, e.action_type, e.target,
-         e.payload, e.risk_score, e.risk_level, e.risk_reason, e.status, e.decided_by, e.decided_at
+         e.payload, e.risk_score, e.risk_level, e.risk_reason, e.risk_factors, e.status, e.decided_by, e.decided_at
   FROM agent_events e LEFT JOIN agents a ON a.id = e.agent_id`;
 
 export async function listIncidents(limit = 50): Promise<AgentEvent[]> {
