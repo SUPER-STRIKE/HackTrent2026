@@ -23,10 +23,12 @@ cases carry their "Why this score" factors.
 1. `/dashboard`: volume chart, risk trace crossing the hold line, event stream (cases 1 to 4 and the risky ones).
 2. `/approvals`: case 10 is waiting. Open **Why this score** to show the built-in rule, Gemini and any baseline factors
    behind the number. Click Approve with MFA, complete MFA, confirm. Then show Deny works without MFA.
-3. `/policies` (live): create a policy named "No refunds", pattern `refund`, effect *Block at once*. It applies to the
-   next action an agent reports. Say: "the team writes its own rules, and they run before the model".
-4. Run the agent again (`npm run simulate`, or any agent through the SDK). The refund is blocked instantly with the
-   policy's reason and no model call. Open its incident: the first line of **Why this score** names the policy.
+3. `/policies` (live): create a policy named "No outbound calls", match on *Action type*, pattern `http\.get`,
+   effect *Block at once*, reason "Outbound network calls are off limits". It applies to the next action an agent
+   reports. Say: "the team writes its own rules, and they run before the model".
+4. Run the agent again (`npm run simulate`; the `http.get` step is the fourth action). It is blocked instantly with the
+   policy's reason and no model call, while the other steps run as before. Open its incident: the first line of
+   **Why this score** names the policy.
 5. `/incidents`: open case 8 (prompt injection) or 10. Show the Gemini summary and the similar incidents.
 6. `/investigator`: ask "Which actions were blocked and why?" and "Which agent is the riskiest?".
 7. Mention: every action above is logged in Tiger Data, and the build itself was recorded with Entire.
