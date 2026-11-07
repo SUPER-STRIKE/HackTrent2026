@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.13.1",
+  "checkpoint_id": "01M6V6WNFC0CTWTKTSZ1WT848R",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "sdk/adapters/mcp-proxy.mjs",
+    "src/app/(console)/policies/actions.ts",
+    "src/lib/scoring-core.ts",
+    "tests/scoring-core.test.ts",
+    "tests/sdk.test.mjs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 112,
+    "cache_creation_tokens": 63840,
+    "cache_read_tokens": 10334352,
+    "output_tokens": 42913,
+    "api_call_count": 50
+  },
+  "redaction": {
+    "replacements": 23,
+    "layers": {
+      "betterleaks": 0,
+      "connection_string": 0,
+      "credential_key": 0,
+      "credential_value": 12,
+      "credentialed_uri": 0,
+      "entropy": 0,
+      "key_context": 11,
+      "provider_token": 0,
+      "shell_stdin": 0
+    }
+  }
+}
