@@ -3,6 +3,13 @@ import { db } from "@/lib/db";
 import { riskThreshold, scoreAction } from "@/lib/risk";
 
 const MAX_BODY_BYTES = 64 * 1024;
+const MAX_PENDING_PER_AGENT = 50;
+
+/** Max actions one agent may report per minute (INGEST_RATE_LIMIT, default 120). */
+function rateLimit(): number {
+  const n = Number(process.env.INGEST_RATE_LIMIT);
+  return Number.isInteger(n) && n > 0 ? n : 120;
+}
 
 type IngestBody = {
   session_id: string;
@@ -70,6 +77,16 @@ export async function POST(request: Request) {
     }
     const body = parseBody(raw);
     if (typeof body === "string") return Response.json({ error: body }, { status: 400 });
+
+    // Checked before the Gemini call so a runaway agent cannot burn quota or flood the approvals queue.
+    const { rows: usage } = await db.query<{ recent: number; pending: number }>(
+      `SELECT count(*) FILTER (WHERE time > now() - interval '1 minute')::int AS recent,
+              count(*) FILTER (WHERE status = 'pending')::int AS pending
+       FROM agent_events WHERE agent_id = $1 AND time > now() - interval '7 days'`,
+      [agent.agentId],
+    );
+    if (usage[0].recent >= rateLimit() || usage[0].pending >= MAX_PENDING_PER_AGENT)
+      return Response.json({ error: "rate limit exceeded" }, { status: 429, headers: { "Retry-After": "30" } });
 
     const risk = await scoreAction({ ...body, agent_id: agent.agentId });
     const status = risk.score >= riskThreshold() ? "pending" : "allowed";
