@@ -1,0 +1,13 @@
+Sign-in finished but Auth0 did not report MFA for this login (amr: none). In Auth0, check that an MFA factor is enabled, the step-up Action is deployed and added to the Login flow, and your user is enrolled in MFA.
+
+---
+
+nhung moi khi can approve lai can dang nhap lai hoi phien nhi
+
+---
+
+vay ve co ban la hoat dong ok roi dung k, khi demo chung ta se lam gi nao
+
+---
+
+mfa chay roi, risk model off thi don gian, deploy auto roi, k can godaddy ten mien lam gi, test policy nhu nao
