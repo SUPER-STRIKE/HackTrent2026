@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { decideEvent, isUuid } from "@/lib/events";
-import { spendStepUp, stepUpLoginUrl } from "@/lib/step-up";
+import { spendStepUp, stepUpLoginUrl, stepUpState } from "@/lib/step-up";
 import { approverName, isApprover } from "@/lib/approvers";
 
 async function requireApprover() {
@@ -20,7 +20,11 @@ export async function approveAction(formData: FormData) {
   const session = await requireApprover();
 
   // Spend the MFA in the database before writing, so a replayed form or old cookie cannot reuse it.
-  if (!(await spendStepUp(session))) redirect(stepUpLoginUrl(`/approvals?confirm=${id}`));
+  if (!(await spendStepUp(session))) {
+    // Back from the MFA login with no MFA proof in the token: another login cannot fix that, so explain instead of looping.
+    if (formData.get("returned") === "1" && (await stepUpState(session)).reason === "no-mfa") redirect(`/approvals?confirm=${id}`);
+    redirect(stepUpLoginUrl(`/approvals?confirm=${id}`));
+  }
   const ok = await decideEvent(id, "approved", approverName(session.user));
   redirect(ok ? "/approvals?notice=approved" : "/approvals?notice=already-decided");
 }

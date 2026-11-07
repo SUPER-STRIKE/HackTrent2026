@@ -15,6 +15,26 @@ function mfaAuthTime(session: SessionData, now: number): number | null {
   return auth_time;
 }
 
+export type StepUpState = {
+  ok: boolean;
+  /** ok, or why an approval cannot use this login. */
+  reason: "ok" | "no-mfa" | "stale" | "spent";
+  amr: string[];
+  /** Seconds since this login, when the token says. */
+  ageSeconds: number | null;
+};
+
+/** Explains whether this login can approve an action, so the UI can say why when it cannot. */
+export async function stepUpState(session: SessionData, now = Date.now() / 1000): Promise<StepUpState> {
+  const { amr, auth_time } = session.user as StepUpClaims;
+  const amrList = Array.isArray(amr) ? amr.filter((a): a is string => typeof a === "string") : [];
+  const ageSeconds = typeof auth_time === "number" ? Math.round(now - auth_time) : null;
+  if (!amrList.includes("mfa")) return { ok: false, reason: "no-mfa", amr: amrList, ageSeconds };
+  if (ageSeconds === null || ageSeconds > STEP_UP_MAX_AGE_SECONDS) return { ok: false, reason: "stale", amr: amrList, ageSeconds };
+  const fresh = await hasFreshStepUp(session, now);
+  return { ok: fresh, reason: fresh ? "ok" : "spent", amr: amrList, ageSeconds };
+}
+
 /** True when the session comes from a login that finished MFA within the last STEP_UP_MAX_AGE_SECONDS and has not been spent. */
 export async function hasFreshStepUp(session: SessionData, now = Date.now() / 1000): Promise<boolean> {
   const authTime = mfaAuthTime(session, now);

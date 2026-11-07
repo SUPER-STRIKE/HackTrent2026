@@ -4,7 +4,7 @@ import { auth0 } from "@/lib/auth0";
 import { isApprover } from "@/lib/approvers";
 import { listPending, listRecentDecisions, type AgentEvent } from "@/lib/events";
 import { ensureDemoData } from "@/lib/demo";
-import { hasFreshStepUp } from "@/lib/step-up";
+import { stepUpState, type StepUpState } from "@/lib/step-up";
 import { WhyScore, PageHead, RiskBadge, StatusTag, railClass } from "@/components/ui";
 import { approveAction, denyAction } from "./actions";
 
@@ -40,12 +40,15 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
 
   await ensureDemoData();
   const approver = isApprover(session.user);
-  const stepUpReady = await hasFreshStepUp(session);
+  const stepUp = await stepUpState(session);
+  const stepUpReady = stepUp.ok;
+  // Back from the MFA login but it cannot approve: say why instead of looping through login again.
+  const mfaProblem = confirmId && !stepUpReady ? mfaProblemText(stepUp) : null;
   const [pending, decided] = await Promise.all([listPending(), listRecentDecisions()]);
 
   return (
     <div className="stack">
-      {notice && <p className={`notice ${notice.tone}`}>{notice.text}</p>}
+      {mfaProblem ? <p className="notice warn">{mfaProblem}</p> : notice && <p className={`notice ${notice.tone}`}>{notice.text}</p>}
       {!approver && !notice && <p className="notice warn">{NOTICES["not-approver"].text}</p>}
 
       <section className="panel">
@@ -58,7 +61,7 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
         ) : (
           <ul className="log">
             {pending.map((e) => (
-              <PendingCard key={e.id} event={e} canDecide={approver} confirming={confirmId === e.id && stepUpReady} />
+              <PendingCard key={e.id} event={e} canDecide={approver} confirming={confirmId === e.id && stepUpReady} returned={confirmId === e.id} />
             ))}
           </ul>
         )}
@@ -89,7 +92,15 @@ async function Queue({ searchParams }: { searchParams: PageProps<"/approvals">["
   );
 }
 
-function PendingCard({ event: e, canDecide, confirming }: { event: AgentEvent; canDecide: boolean; confirming: boolean }) {
+function mfaProblemText(s: StepUpState): string {
+  if (s.reason === "no-mfa")
+    return `Sign-in finished but Auth0 did not report MFA for this login (amr: ${s.amr.length ? s.amr.join(", ") : "none"}). In Auth0, check that an MFA factor is enabled, the step-up Action is deployed and added to the Login flow, and your user is enrolled in MFA.`;
+  if (s.reason === "stale") return `The MFA login is ${s.ageSeconds ?? "?"} seconds old, over the 5 minute limit. Press Approve with MFA to sign in again.`;
+  if (s.reason === "spent") return "This MFA login was already used for another approval. Each approval needs its own MFA check: press Approve with MFA to sign in again.";
+  return "";
+}
+
+function PendingCard({ event: e, canDecide, confirming, returned }: { event: AgentEvent; canDecide: boolean; confirming: boolean; returned: boolean }) {
   const payload = JSON.stringify(e.payload, null, 2);
   return (
     <li className={`pending ${railClass(e.risk_level)} ${confirming ? "confirming" : ""}`}>
@@ -110,6 +121,7 @@ function PendingCard({ event: e, canDecide, confirming }: { event: AgentEvent; c
         <div className="actions">
           <form action={approveAction}>
             <input type="hidden" name="id" value={e.id} />
+            {returned && <input type="hidden" name="returned" value="1" />}
             <button className="btn btn-primary">{confirming ? "MFA verified: confirm approval" : "Approve with MFA"}</button>
           </form>
           <form action={denyAction}>
