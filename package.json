@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs",
+    "demo": "node scripts/seed.mjs --live",
     "traffic": "node --env-file=.env.local scripts/traffic.mjs",
     "simulate": "node --env-file=.env.local scripts/simulate.mjs"
   },
