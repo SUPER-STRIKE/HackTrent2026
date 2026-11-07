@@ -1,5 +1,7 @@
 import { auth0 } from "@/lib/auth0";
 
+export const instant = false;
+
 export default async function Home() {
   const session = await auth0.getSession();
 
